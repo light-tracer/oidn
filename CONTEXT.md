@@ -65,7 +65,6 @@ Goal: add a backend based on the Dawn WebGPU library. First milestone is a minim
   prints `PASSED` if the copied data matches.
 - `scripts/test.py` runs this program when invoked with `--device wgpu`.
 
-The initial milestone is compiling this skeleton and successfully running the identity kernel on a WebGPU-compatible adapter.
 
 ## Environment Persistence
 This workspace is ephemeral. Packages installed with `apt-get`, downloaded weights, and built artifacts vanish after the session ends. Reinstall dependencies and run `git lfs pull` each time a new session starts.
