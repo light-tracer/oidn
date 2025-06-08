@@ -55,7 +55,16 @@ Goal: add a backend based on the Dawn WebGPU library. First milestone is a minim
 5. **Testing**
    - Add a minimal unit test or example to run the identity kernel and verify output.
 
-The initial milestone is compiling this skeleton and successfully running the identity kernel on a WebGPU-compatible adapter.
+### Implementation Notes
+- Prebuilt `wgpu-native` binaries are downloaded during configure from
+  `https://github.com/gfx-rs/wgpu-native` (Linux x86_64 release). The CMake macro
+  `oidn_download_wgpu()` in `cmake/oidn_wgpu.cmake` fetches and unpacks the
+  archive to the build tree.
+- The `devices/wgpu` directory contains a small `wgpuIdentity` program using the
+  pure C WebGPU API. It dispatches a WGSL shader copying a buffer to another and
+  prints `PASSED` if the copied data matches.
+- `scripts/test.py` runs this program when invoked with `--device wgpu`.
+
 
 ## Environment Persistence
 This workspace is ephemeral. Packages installed with `apt-get`, downloaded weights, and built artifacts vanish after the session ends. Reinstall dependencies and run `git lfs pull` each time a new session starts.

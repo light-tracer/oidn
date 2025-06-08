@@ -76,6 +76,9 @@
 #if !defined(OIDN_DEVICE_METAL)
   #cmakedefine OIDN_DEVICE_METAL
 #endif
+#if !defined(OIDN_DEVICE_WGPU)
+  #cmakedefine OIDN_DEVICE_WGPU
+#endif
 
 #cmakedefine OIDN_FILTER_RT
 #cmakedefine OIDN_FILTER_RTLIGHTMAP

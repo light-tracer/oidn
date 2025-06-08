@@ -87,6 +87,7 @@ typedef enum
   OIDN_DEVICE_TYPE_CUDA  = 3, // CUDA device
   OIDN_DEVICE_TYPE_HIP   = 4, // HIP device
   OIDN_DEVICE_TYPE_METAL = 5, // Metal device
+  OIDN_DEVICE_TYPE_WGPU  = 6, // WebGPU device (experimental)
 } OIDNDeviceType;
 
 // Error codes

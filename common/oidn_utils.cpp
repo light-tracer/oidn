@@ -51,6 +51,7 @@ OIDN_NAMESPACE_BEGIN
     case DeviceType::CUDA:    sm << "CUDA";    break;
     case DeviceType::HIP:     sm << "HIP";     break;
     case DeviceType::Metal:   sm << "Metal";   break;
+    case DeviceType::WGPU:    sm << "WGPU";    break;
     default:
       throw std::invalid_argument("invalid device type");
     }
@@ -76,6 +77,8 @@ OIDN_NAMESPACE_BEGIN
       deviceType = DeviceType::HIP;
     else if (str == "metal")
       deviceType = DeviceType::Metal;
+    else if (str == "wgpu")
+      deviceType = DeviceType::WGPU;
     else
       throw std::invalid_argument("invalid device type");
 
