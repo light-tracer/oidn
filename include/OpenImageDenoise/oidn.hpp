@@ -572,6 +572,7 @@ OIDN_NAMESPACE_BEGIN
     CUDA  = OIDN_DEVICE_TYPE_CUDA,  // CUDA device
     HIP   = OIDN_DEVICE_TYPE_HIP,   // HIP device
     Metal = OIDN_DEVICE_TYPE_METAL, // Metal device
+    WGPU  = OIDN_DEVICE_TYPE_WGPU,  // WebGPU device (experimental)
   };
 
   // Error codes
