@@ -60,6 +60,7 @@ Goal: add a backend based on the Dawn WebGPU library. First milestone is a minim
   `https://github.com/gfx-rs/wgpu-native` (Linux x86_64 release). The CMake macro
   `oidn_download_wgpu()` in `cmake/oidn_wgpu.cmake` fetches and unpacks the
   archive to the build tree.
+- Currently version `v25.0.2.1` is used.
 - The `devices/wgpu` directory contains a small `wgpuIdentity` program using the
   pure C WebGPU API. It dispatches a WGSL shader copying a buffer to another and
   prints `PASSED` if the copied data matches.
