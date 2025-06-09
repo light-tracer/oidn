@@ -76,8 +76,8 @@
 #if !defined(OIDN_DEVICE_METAL)
   #cmakedefine OIDN_DEVICE_METAL
 #endif
-#if !defined(OIDN_DEVICE_WGPU)
-  #cmakedefine OIDN_DEVICE_WGPU
+#if !defined(OIDN_DEVICE_WEBGPU)
+  #cmakedefine OIDN_DEVICE_WEBGPU
 #endif
 
 #cmakedefine OIDN_FILTER_RT

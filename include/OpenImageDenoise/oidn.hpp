@@ -866,6 +866,12 @@ OIDN_NAMESPACE_BEGIN
     return oidnIsMetalDeviceSupported(device);
   }
 
+  // Returns whether the WebGPU backend is available.
+  inline bool isWebGPUDeviceSupported()
+  {
+    return oidnIsWebGPUDeviceSupported();
+  }
+
   // Creates a device of the specified type.
   inline DeviceRef newDevice(DeviceType type = DeviceType::Default)
   {
@@ -957,6 +963,12 @@ OIDN_NAMESPACE_BEGIN
   inline DeviceRef newMetalDevice(const std::vector<MTLCommandQueue_id>& commandQueues)
   {
     return DeviceRef(oidnNewMetalDevice(commandQueues.data(), static_cast<int>(commandQueues.size())));
+  }
+
+  // Creates a WebGPU device.
+  inline DeviceRef newWebGPUDevice()
+  {
+    return DeviceRef(oidnNewDevice(OIDN_DEVICE_TYPE_WGPU));
   }
 
   // -----------------------------------------------------------------------------------------------

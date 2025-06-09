@@ -250,6 +250,15 @@ OIDN_API_NAMESPACE_BEGIN
     return false;
   }
 
+  OIDN_API bool oidnIsWebGPUDeviceSupported()
+  {
+    OIDN_TRY
+      OIDN_INIT_CONTEXT(ctx, DeviceType::WGPU);
+      return ctx.isDeviceSupported(DeviceType::WGPU);
+    OIDN_CATCH
+    return false;
+  }
+
   OIDN_API OIDNDevice oidnNewDevice(OIDNDeviceType inType)
   {
     DeviceType type = static_cast<DeviceType>(inType);
