@@ -9,8 +9,10 @@ add_library(OpenImageDenoise ${OIDN_LIB_TYPE} ${API_SOURCES} ${OIDN_RESOURCE_FIL
 
 if(OIDN_DEVICE_WEBGPU)
   add_subdirectory(${PROJECT_SOURCE_DIR}/devices/webgpu ${CMAKE_CURRENT_BINARY_DIR}/webgpu)
-  target_sources(OpenImageDenoise PRIVATE ${OIDN_WEBGPU_SOURCES})
-  target_link_libraries(OpenImageDenoise PRIVATE PkgConfig::WGPU)
+  target_sources(OpenImageDenoise PRIVATE ${OIDN_WEBGPU_SOURCE_FILES})
+  target_link_libraries(OpenImageDenoise PUBLIC ${OIDN_WGPU_DIR}/lib/libwgpu_native.a)
+  target_include_directories(OpenImageDenoise PUBLIC
+    $<BUILD_INTERFACE:${OIDN_WGPU_DIR}/include>)
 endif()
 
 set_target_properties(OpenImageDenoise PROPERTIES

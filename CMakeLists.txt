@@ -98,8 +98,7 @@ endif()
 ## -----------------------------------------------------------------------------
 
 if(OIDN_DEVICE_WEBGPU)
-  find_package(PkgConfig REQUIRED)
-  pkg_check_modules(WGPU REQUIRED IMPORTED_TARGET webgpu)
+  add_subdirectory(external/webgpu)
 endif()
 
 add_subdirectory(common)

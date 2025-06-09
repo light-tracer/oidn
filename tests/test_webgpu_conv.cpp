@@ -1,4 +1,5 @@
-#include "webgpu.h"
+#include "OpenImageDenoise/webgpu.h"
+#include "../devices/webgpu/webgpu_engine.h"
 #include <gtest/gtest.h>
 
 using namespace oidn;

@@ -68,7 +68,7 @@ OIDN_NAMESPACE_BEGIN
     wgpuDevicePoll(device, true, nullptr);
   }
 
-  WGPUBuffer WebGPUDevice::createBuffer(size_t byteSize, WGPUBufferUsageFlags usage,
+  WGPUBuffer WebGPUDevice::createBuffer(size_t byteSize, WGPUBufferUsage usage,
                                         const void* initData)
   {
     WGPUBufferDescriptor desc{};
