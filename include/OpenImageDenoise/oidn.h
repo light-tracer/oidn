@@ -125,6 +125,9 @@ OIDN_API bool oidnIsHIPDeviceSupported(int deviceID);
 // Returns whether the specified Metal device is supported.
 OIDN_API bool oidnIsMetalDeviceSupported(MTLDevice_id device);
 
+// Returns whether the WebGPU backend is available.
+OIDN_API bool oidnIsWebGPUDeviceSupported();
+
 // Creates a device of the specified type.
 OIDN_API OIDNDevice oidnNewDevice(OIDNDeviceType type);
 

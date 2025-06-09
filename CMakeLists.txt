@@ -34,7 +34,7 @@ if(NOT APPLE)
 elseif(OIDN_ARCH STREQUAL "ARM64")
   option(OIDN_DEVICE_METAL "Enable Metal device." OFF)
 endif()
-option(OIDN_DEVICE_WGPU "Enable WebGPU device." OFF)
+option(OIDN_DEVICE_WEBGPU "Enable WebGPU device." OFF)
 
 # Filters
 option(OIDN_FILTER_RT "Include trained weights of the RT filter." ON)
@@ -97,14 +97,16 @@ endif()
 ## Libraries
 ## -----------------------------------------------------------------------------
 
-if(OIDN_DEVICE_WGPU)
-  add_subdirectory(external/webgpu)
+if(OIDN_DEVICE_WEBGPU)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(WGPU REQUIRED IMPORTED_TARGET webgpu)
 endif()
 
 add_subdirectory(common)
 add_subdirectory(core)
 add_subdirectory(api)
 add_subdirectory(devices)
+add_subdirectory(tests)
 
 # Export targets from the build tree for external projects
 export(EXPORT OpenImageDenoise_Exports
