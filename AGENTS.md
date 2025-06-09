@@ -1,61 +1,39 @@
-# OIDN Development Notes
+# OIDN Development Notes – Agent Edition
+
+The document is meant to be read by autonomous coding agents.  
+It tells you **what already works**, **how to reproduce it** and **next steps** to give you context and general direction.
+Follow the user prompt to determine what to work on.
 
 ## Project Purpose
 Intel Open Image Denoise (OIDN) is a library for removing noise from ray traced images. It contains multiple device backends (CPU, SYCL, CUDA, HIP, Metal) which implement the same denoising API.
 
-## Backend Selection Overview
-- Device modules register themselves via `Context::registerDeviceType`. Each module detects available physical devices and provides a `DeviceFactory` implementation.
-- `Context::init()` loads device modules based on `OIDN_DEVICE_*` environment variables and builds a list of physical devices.
-- `oidnNewDevice` or `oidnNewDeviceByID` constructs a `Device` using this registry. The `OIDN_DEFAULT_DEVICE` environment variable can override the default device type or physical device ID.
+End Goal: add the new backend based on the WebGPU API.
 
-## CPU Backend Dependencies
-To build the CPU backend on Ubuntu, install ISPC and oneTBB:
+---
+
+## 0. Fresh Session
+
+## Configure: enable WebGPU backend (OFF by default)
+cmake -B build -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DOIDN_DEVICE_WEBGPU=ON .
+
+## Build everything
+cmake --build build -j$(nproc)
+
+## Running WebGPU Tests with Software Emulation
+WebGPU uses Vulkan by default. In headless environments without a discrete GPU
+you can enable Mesa's Lavapipe CPU driver to emulate Vulkan.
+Set the `VK_ICD_FILENAMES` environment variable before running tests:
+
 ```bash
-apt-get update
-apt-get install -y libtbb-dev libtbb12 ispc
+export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+cd build && ctest --output-on-failure -R WebGPU.Conv2d
 ```
-Configure and build with CMake/Ninja (weights optional if not fetched):
-```bash
-cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DOIDN_FILTER_RT=OFF \
-      -DOIDN_FILTER_RTLIGHTMAP=OFF ..
-ninja -j4
-```
+This forces the Vulkan loader to use Lavapipe so the WebGPU unit test runs
+entirely in software.
 
-## Weights Submodule
-The pretrained filter weights live in the `weights` submodule and use Git LFS. To fetch them:
-```bash
-git submodule update --init --recursive weights
-cd weights && git lfs pull
-```
-Without Git LFS the blobs will be invalid and the build fails.
-
-## Metal Backend Highlights
-- Implemented under `devices/metal/` using Objective‑C++ and MPSGraph.
-- `MetalDevice` enumerates available `MTLDevice` objects and manages a command queue.
-- `MetalEngine` submits compute kernels via Metal compute pipelines and MPSGraph ops for convolutions.
-- Module registration occurs in `metal_module.mm` which calls `Context::registerDeviceType`.
-
-## WebGPU (Dawn) Backend – Implementation Plan
-Goal: add a backend based on the Dawn WebGPU library. First milestone is a minimal `wgpu` backend executing a simple identity kernel.
-
-1. **New Device Type**
-   - Extend `DeviceType` enum and API enums to include `OIDN_DEVICE_TYPE_WGPU`.
-   - Add build option `OIDN_DEVICE_WGPU` in CMake similar to other device toggles.
-2. **Backend Skeleton**
-   - Create `devices/wgpu` directory with `CMakeLists.txt` and source files implementing `WGPUDevice`, `WGPUEngine`, and a registration module.
-   - `WGPUDevice` detects adapters via Dawn, selects one, and owns a command queue.
-   - `WGPUEngine` wraps WebGPU command buffers and pipelines; provide minimal buffer and tensor classes.
-3. **Identity Kernel Prototype**
-   - Add a `.wgsl` shader implementing an identity copy of an image buffer.
-   - Compile the WGSL during build or at runtime using Dawn utilities.
-   - Implement a simple op in `WGPUEngine::submitKernel` dispatching this shader to validate the pipeline.
-4. **Build Integration**
-   - Link against Dawn libraries (dawn_wire, dawn_native). Provide notes to install Dawn or fetch a prebuilt binary.
-   - Ensure CPU and other device builds remain unaffected when `OIDN_DEVICE_WGPU=OFF` (default).
-5. **Testing**
-   - Add a minimal unit test or example to run the identity kernel and verify output.
-
-### Implementation Notes
+### WebGPU
 - Prebuilt `wgpu-native` binaries are downloaded during configure from
   `https://github.com/gfx-rs/wgpu-native` (Linux x86_64 release). The CMake macro
   `oidn_download_wgpu()` in `cmake/oidn_wgpu.cmake` fetches and unpacks the
@@ -67,30 +45,51 @@ Goal: add a backend based on the Dawn WebGPU library. First milestone is a minim
 - The legacy sample programs under `devices/wgpu` are kept for reference but
   are not used by the unit tests.
 
-
 ## Environment Persistence
-This workspace is ephemeral. Packages installed with `apt-get`, downloaded weights, and built artifacts vanish after the session ends. Reinstall dependencies and run `git lfs pull` each time a new session starts.
+This workspace is ephemeral. Packages installed with `apt-get`, downloaded weights, and built artifacts vanish after the session ends.
 
-## Running WebGPU Tests with Software Emulation
-WebGPU uses Vulkan by default. In headless environments without a discrete GPU
-you can enable Mesa's Lavapipe CPU driver to emulate Vulkan. Install the driver
-and set the `VK_ICD_FILENAMES` environment variable before configuring OIDN:
+## WebGPU Backend – Current State ✅
+Milestone “single-layer bootstrap” is almost finished:
 
-```bash
-apt-get update && apt-get install -y mesa-vulkan-drivers
-export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json
-cmake -B build -DOIDN_DEVICE_WEBGPU=ON .
-cmake --build build -j4
-cd build && ctest --output-on-failure -R WebGPU.Conv2d
-```
-This forces the Vulkan loader to use Lavapipe so the WebGPU unit test runs
-entirely in software.
+New device type OIDN_DEVICE_TYPE_WEBGPU should be selectable via public C API.
 
-## Current State
-* A minimal WebGPU backend implements a fused conv2d+ReLU kernel used by the
-  `WebGPU.Conv2d` unit test.
+Source tree:
 
-## Possible Next Steps
-* Integrate a real WebGPU backend into the library following the milestone plan
-  (create device/engine classes, upload tensors, run layers).
-* Extend unit tests to validate numerical parity with the CPU backend.
+devices/webgpu/
+  ├─ webgpu_device.h / .cpp      # owns WGPUInstance/Device/Queue
+  ├─ webgpu_engine.h / .cpp      # records 1 compute pass
+  ├─ webgpu_tensor.h             # POD for tensor views
+  └─ CMakeLists.txt              # adds option OIDN_DEVICE_WEBGPU
+
+### Implementation details
+Raw C API of wgpu-native, no wgpu:: C++ wrapper.
+WGSL for conv2d + Bias + ReLU lives as an inline string literal
+inside webgpu_engine.cpp; no external .wgsl file is shipped.
+Fixed stride = 1, no padding, arbitrary N,C,H,W.
+Work-group size hard-coded to 8×8×1.
+Host ↔ GPU transfers: naïve per-tensor buffers (CreateBuffer + Map).
+
+## Verification Procedure
+Build with -DOIDN_DEVICE_WEBGPU=ON.
+
+Ensure environment selects a usable backend
+Hardware Vulkan/Metal or Lavapipe SW fallback.
+
+Run: ctest --output-on-failure -R WebGPU.Conv2d
+
+The test internally:
+
+prepares deterministic random tensors,
+runs the exact same layer on CPU & WebGPU,
+declares success if
+max( |ref - gpu| / max(|ref|, 1e-6) ) < 1e-4.
+
+## Next Steps / Perspective
+
+Priority	Task	Brief Description
+P0	Public buffer API	Support oidnNewBuffer / oidnReadBuffer so users can upload & download tensors without the private engine helpers.
+P0	More primitive kernels	Implement pooled, upsample, element-wise, softplus, etc. Follow the same inline-WGSL approach.
+P1	Memory allocator	Replace the “one buffer per tensor” strategy with a sub-allocator to reduce memory & improve performance.
+P1	Graph execution	Record multiple layers in a single command buffer to amortise overhead.
+P2	Full denoiser demo	Make examples/denoise run on a 256×256 tile using the WebGPU backend.
+P2	Performance passes	Explore workgroup sizes, shared-memory tiling, fused convolution blocks.
