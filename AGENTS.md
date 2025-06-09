@@ -69,3 +69,17 @@ Goal: add a backend based on the Dawn WebGPU library. First milestone is a minim
 
 ## Environment Persistence
 This workspace is ephemeral. Packages installed with `apt-get`, downloaded weights, and built artifacts vanish after the session ends. Reinstall dependencies and run `git lfs pull` each time a new session starts.
+
+## Running WebGPU Tests with Software Emulation
+The `wgpuIdentity` test relies on the Vulkan backend of `wgpu-native`. In
+headless environments without a discrete GPU you can use Mesa's Lavapipe CPU
+driver. Install the driver and select it via the `VK_ICD_FILENAMES` environment
+variable before running `scripts/test.py`:
+
+```bash
+apt-get update && apt-get install -y mesa-vulkan-drivers
+export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+scripts/test.py --device wgpu --command run
+```
+This forces the Vulkan loader to use Lavapipe so the WebGPU test runs entirely
+in software.

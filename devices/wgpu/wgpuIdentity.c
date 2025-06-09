@@ -9,18 +9,22 @@ static void handle_request_adapter(WGPURequestAdapterStatus status,
                                    WGPUAdapter adapter, WGPUStringView message,
                                    void *userdata1, void *userdata2)
 {
-  (void)message; (void)userdata2;
+  (void)message;
+  bool* done = userdata2;
   if (status == WGPURequestAdapterStatus_Success)
     *(WGPUAdapter*)userdata1 = adapter;
+  *done = true;
 }
 
 static void handle_request_device(WGPURequestDeviceStatus status,
                                   WGPUDevice device, WGPUStringView message,
                                   void *userdata1, void *userdata2)
 {
-  (void)message; (void)userdata2;
+  (void)message;
+  bool* done = userdata2;
   if (status == WGPURequestDeviceStatus_Success)
     *(WGPUDevice*)userdata1 = device;
+  *done = true;
 }
 
 static void handle_buffer_map(WGPUMapAsyncStatus status,
@@ -40,19 +44,23 @@ int main(void)
   assert(instance);
 
   WGPUAdapter adapter = NULL;
-  WGPUFuture fut = wgpuInstanceRequestAdapter(instance, NULL,
+  bool adapter_done = false;
+  wgpuInstanceRequestAdapter(instance, NULL,
       (WGPURequestAdapterCallbackInfo){ .callback = handle_request_adapter,
-                                        .userdata1 = &adapter });
-  WGPUFutureWaitInfo wi = { fut, false };
-  wgpuInstanceWaitAny(instance, 1, &wi, UINT64_MAX);
+                                        .userdata1 = &adapter,
+                                        .userdata2 = &adapter_done });
+  while (!adapter_done)
+    wgpuInstanceProcessEvents(instance);
   assert(adapter);
 
   WGPUDevice device = NULL;
-  fut = wgpuAdapterRequestDevice(adapter, NULL,
+  bool device_done = false;
+  wgpuAdapterRequestDevice(adapter, NULL,
         (WGPURequestDeviceCallbackInfo){ .callback = handle_request_device,
-                                          .userdata1 = &device });
-  wi.future = fut; wi.completed = false;
-  wgpuInstanceWaitAny(instance, 1, &wi, UINT64_MAX);
+                                          .userdata1 = &device,
+                                          .userdata2 = &device_done });
+  while (!device_done)
+    wgpuInstanceProcessEvents(instance);
   assert(device);
 
   WGPUQueue queue = wgpuDeviceGetQueue(device);
@@ -110,7 +118,11 @@ int main(void)
   wgpuBufferUnmap(src);
 
   WGPUBuffer dst = wgpuDeviceCreateBuffer(device,
-      &(WGPUBufferDescriptor){ .usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_MapRead,
+      &(WGPUBufferDescriptor){ .usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
+                               .size = byte_size, .mappedAtCreation = false });
+
+  WGPUBuffer readback = wgpuDeviceCreateBuffer(device,
+      &(WGPUBufferDescriptor){ .usage = WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst,
                                .size = byte_size, .mappedAtCreation = false });
 
   WGPUBindGroupEntry bg_entries[2] = {
@@ -131,21 +143,22 @@ int main(void)
   wgpuComputePassEncoderDispatchWorkgroups(pass, num, 1, 1);
   wgpuComputePassEncoderEnd(pass);
   wgpuComputePassEncoderRelease(pass);
+  wgpuCommandEncoderCopyBufferToBuffer(enc, dst, 0, readback, 0, byte_size);
   WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(enc, NULL);
   wgpuQueueSubmit(queue, 1, &cmd);
   wgpuDevicePoll(device, true, NULL);
 
   bool mapped = false;
-  wgpuBufferMapAsync(dst, WGPUMapMode_Read, 0, byte_size,
-                     (WGPUBufferMapCallbackInfo){ .callback = handle_buffer_map, .userdata1=&mapped });
+  wgpuBufferMapAsync(readback, WGPUMapMode_Read, 0, byte_size,
+                     (WGPUBufferMapCallbackInfo){ .callback = handle_buffer_map, .userdata1 = &mapped });
   while (!mapped)
     wgpuDevicePoll(device, true, NULL);
 
-  float* out = (float*)wgpuBufferGetMappedRange(dst, 0, byte_size);
+  float* out = (float*)wgpuBufferGetMappedRange(readback, 0, byte_size);
   bool passed = true;
   for (uint32_t i=0;i<num;i++)
     if (out[i] != 42.f) { passed = false; break; }
-  wgpuBufferUnmap(dst);
+  wgpuBufferUnmap(readback);
 
   printf(passed ? "PASSED\n" : "FAILED\n");
 
@@ -156,6 +169,7 @@ int main(void)
   wgpuPipelineLayoutRelease(pl);
   wgpuBindGroupLayoutRelease(bgl);
   wgpuShaderModuleRelease(shader_module);
+  wgpuBufferRelease(readback);
   wgpuBufferRelease(dst);
   wgpuBufferRelease(src);
   wgpuQueueRelease(queue);
