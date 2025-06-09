@@ -34,6 +34,7 @@ if(NOT APPLE)
 elseif(OIDN_ARCH STREQUAL "ARM64")
   option(OIDN_DEVICE_METAL "Enable Metal device." OFF)
 endif()
+option(OIDN_DEVICE_WGPU "Enable WebGPU device." OFF)
 
 # Filters
 option(OIDN_FILTER_RT "Include trained weights of the RT filter." ON)
@@ -95,6 +96,10 @@ endif()
 ## -----------------------------------------------------------------------------
 ## Libraries
 ## -----------------------------------------------------------------------------
+
+if(OIDN_DEVICE_WGPU)
+  add_subdirectory(external/webgpu)
+endif()
 
 add_subdirectory(common)
 add_subdirectory(core)
