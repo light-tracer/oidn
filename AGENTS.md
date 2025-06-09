@@ -61,33 +61,34 @@ Goal: add a backend based on the Dawn WebGPU library. First milestone is a minim
   `oidn_download_wgpu()` in `cmake/oidn_wgpu.cmake` fetches and unpacks the
   archive to the build tree.
 - Currently version `v25.0.2.1` is used.
-- The `devices/wgpu` directory contains small sample programs: `wgpuIdentity`
-  copies a buffer while `wgpuConv2d` runs a tiny convolution + ReLU kernel and
-  compares the result against a CPU reference.
-- `scripts/test.py --device wgpu` executes both programs in sequence.
+- CMake automatically downloads a prebuilt `wgpu-native` package when
+  `OIDN_DEVICE_WEBGPU` is enabled. No manual installation of the library is
+  required.
+- The legacy sample programs under `devices/wgpu` are kept for reference but
+  are not used by the unit tests.
 
 
 ## Environment Persistence
 This workspace is ephemeral. Packages installed with `apt-get`, downloaded weights, and built artifacts vanish after the session ends. Reinstall dependencies and run `git lfs pull` each time a new session starts.
 
 ## Running WebGPU Tests with Software Emulation
-The `wgpuIdentity` test relies on the Vulkan backend of `wgpu-native`. In
-headless environments without a discrete GPU you can use Mesa's Lavapipe CPU
-driver. Install the driver and select it via the `VK_ICD_FILENAMES` environment
-variable before running `scripts/test.py`:
+WebGPU uses Vulkan by default. In headless environments without a discrete GPU
+you can enable Mesa's Lavapipe CPU driver to emulate Vulkan. Install the driver
+and set the `VK_ICD_FILENAMES` environment variable before configuring OIDN:
 
 ```bash
 apt-get update && apt-get install -y mesa-vulkan-drivers
 export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json
-scripts/test.py --device wgpu --command run
+cmake -B build -DOIDN_DEVICE_WEBGPU=ON .
+cmake --build build -j4
+cd build && ctest --output-on-failure -R WebGPU.Conv2d
 ```
-This forces the Vulkan loader to use Lavapipe so the WebGPU test runs entirely
-in software.
+This forces the Vulkan loader to use Lavapipe so the WebGPU unit test runs
+entirely in software.
 
 ## Current State
-* Basic WebGPU integration is present via `wgpuIdentity` and `wgpuConv2d`
-  sample programs in `devices/wgpu`.
-* `scripts/test.py --device wgpu` builds and executes both samples.
+* A minimal WebGPU backend implements a fused conv2d+ReLU kernel used by the
+  `WebGPU.Conv2d` unit test.
 
 ## Possible Next Steps
 * Integrate a real WebGPU backend into the library following the milestone plan

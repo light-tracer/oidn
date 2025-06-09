@@ -16,7 +16,7 @@ OIDN_NAMESPACE_BEGIN
     void submit(WGPUCommandBuffer cmdBuf);
     void sync();
 
-    WGPUBuffer createBuffer(size_t byteSize, WGPUBufferUsageFlags usage,
+    WGPUBuffer createBuffer(size_t byteSize, WGPUBufferUsage usage,
                             const void* initData = nullptr);
 
   protected:

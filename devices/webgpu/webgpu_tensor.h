@@ -6,9 +6,10 @@ OIDN_NAMESPACE_BEGIN
 
   struct WebGPUTensor
   {
-    WGPUBuffer buf;
-    size_t     offset;
-    uint32_t   n, c, h, w;
+    WGPUBuffer      buf;
+    size_t          offset;
+    uint32_t        n, c, h, w;
+    WebGPUTensorType type;
   };
 
   enum class WebGPUTensorType

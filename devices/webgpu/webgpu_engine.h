@@ -1,6 +1,6 @@
 #pragma once
 #include "core/engine.h"
-#include "webgpu_tensor.h"
+#include "OpenImageDenoise/webgpu.h"
 #include <vector>
 #include <unordered_map>
 

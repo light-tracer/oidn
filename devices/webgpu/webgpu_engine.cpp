@@ -107,7 +107,7 @@ OIDN_NAMESPACE_BEGIN
   {
     size_t count = size_t(n) * c * h * w;
     size_t bytes = count * sizeof(float);
-    WGPUBufferUsageFlags usage = WGPUBufferUsage_Storage;
+    WGPUBufferUsage usage = WGPUBufferUsage_Storage;
     if (type == WebGPUTensorType::OUTPUT)
       usage |= WGPUBufferUsage_MapRead | WGPUBufferUsage_CopySrc;
     else
@@ -117,7 +117,7 @@ OIDN_NAMESPACE_BEGIN
                                           (type == WebGPUTensorType::OUTPUT) ? nullptr : data);
     if (type == WebGPUTensorType::OUTPUT)
       outputHosts[buf] = const_cast<float*>(data);
-    return {buf,0,n,c,h,w};
+    return {buf,0,n,c,h,w,type};
   }
 
   void WebGPUEngine::conv2d_eltwise(const WebGPUTensor& src,
