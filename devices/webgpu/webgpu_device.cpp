@@ -2,6 +2,7 @@
 #include "webgpu_engine.h"
 #include "core/context.h"
 #include <cstring>
+#include <webgpu/wgpu.h>
 
 OIDN_NAMESPACE_BEGIN
 
