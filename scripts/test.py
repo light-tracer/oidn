@@ -119,9 +119,10 @@ def run_test(cmd, arch='native', retry_if_status=None):
     exit(1)
 
 if cfg.device == 'wgpu':
-  exe = os.path.join(bin_dir, 'wgpuIdentity')
-  print_test('wgpuIdentity')
-  run_test(exe)
+  for prog in ['wgpuIdentity', 'wgpuConv2d']:
+    exe = os.path.join(bin_dir, prog)
+    print_test(prog)
+    run_test(exe)
   if cfg.command == 'run':
     print('Success: all tests passed')
   exit(0)

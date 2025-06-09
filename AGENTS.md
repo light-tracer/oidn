@@ -61,10 +61,10 @@ Goal: add a backend based on the Dawn WebGPU library. First milestone is a minim
   `oidn_download_wgpu()` in `cmake/oidn_wgpu.cmake` fetches and unpacks the
   archive to the build tree.
 - Currently version `v25.0.2.1` is used.
-- The `devices/wgpu` directory contains a small `wgpuIdentity` program using the
-  pure C WebGPU API. It dispatches a WGSL shader copying a buffer to another and
-  prints `PASSED` if the copied data matches.
-- `scripts/test.py` runs this program when invoked with `--device wgpu`.
+- The `devices/wgpu` directory contains small sample programs: `wgpuIdentity`
+  copies a buffer while `wgpuConv2d` runs a tiny convolution + ReLU kernel and
+  compares the result against a CPU reference.
+- `scripts/test.py --device wgpu` executes both programs in sequence.
 
 
 ## Environment Persistence
@@ -83,3 +83,13 @@ scripts/test.py --device wgpu --command run
 ```
 This forces the Vulkan loader to use Lavapipe so the WebGPU test runs entirely
 in software.
+
+## Current State
+* Basic WebGPU integration is present via `wgpuIdentity` and `wgpuConv2d`
+  sample programs in `devices/wgpu`.
+* `scripts/test.py --device wgpu` builds and executes both samples.
+
+## Possible Next Steps
+* Integrate a real WebGPU backend into the library following the milestone plan
+  (create device/engine classes, upload tensors, run layers).
+* Extend unit tests to validate numerical parity with the CPU backend.
