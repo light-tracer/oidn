@@ -8,6 +8,10 @@
 OIDN_NAMESPACE_BEGIN
 
   class WebGPUDevice;
+  class WebGPUInputProcess;
+  class WebGPUOutputProcess;
+  class WebGPUImageCopy;
+  class WebGPUAutoexposure;
 
   class WebGPUEngine : public Engine
   {
@@ -21,7 +25,6 @@ OIDN_NAMESPACE_BEGIN
     Ref<Buffer> newBuffer(size_t byteSize, Storage storage) override;
     Ref<Buffer> newBuffer(void* ptr, size_t byteSize) override;
 
-    // Engine interface overrides - currently unsupported operations
     Ref<Conv> newConv(const ConvDesc& desc) override;
     Ref<Pool> newPool(const PoolDesc& desc) override;
     Ref<Upsample> newUpsample(const UpsampleDesc& desc) override;

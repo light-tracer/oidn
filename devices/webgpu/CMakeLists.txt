@@ -5,6 +5,10 @@ set(_srcs
   webgpu_conv.cpp
   webgpu_pool.cpp
   webgpu_upsample.cpp
+  webgpu_input_process.cpp
+  webgpu_output_process.cpp
+  webgpu_image_copy.cpp
+  webgpu_autoexposure.cpp
   webgpu_module.cpp
   webgpu_helper.cpp)
 set(OIDN_WEBGPU_SOURCES ${_srcs} PARENT_SCOPE)
