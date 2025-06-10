@@ -63,6 +63,13 @@ OIDN_NAMESPACE_BEGIN
 
     queue = wgpuDeviceGetQueue(device);
 
+    // Use the same native tensor layouts as the Metal backend (NHWC / OIHW)
+    tensorDataType = DataType::Float32;
+    weightDataType = DataType::Float32;
+    tensorLayout   = TensorLayout::hwc;
+    weightLayout   = TensorLayout::oihw;
+    tensorBlockC   = 1;
+
     subdevices.emplace_back(new Subdevice(std::unique_ptr<Engine>(new WebGPUEngine(this))));
   }
 
