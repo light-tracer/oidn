@@ -74,7 +74,7 @@ Fixed stride = 1, no padding, arbitrary N,C,H,W.
 Work-group size hard-coded to 8×8×1.
 Host ↔ GPU transfers use the public buffer API (`oidnNewBuffer`, `oidnWriteBuffer`,
 `oidnReadBuffer`).
-Currently kernels for `conv2d_eltwise`, `pool2x2`, `upsample2x`, `input_process`, `output_process`, `image_copy`, and `autoexposure` are implemented in WGSL shaders.
+Currently kernels for `conv2d_eltwise`, `pool2x2`, `upsample2x`, `add`, `mul`, `softplus`, `input_process`, `output_process`, `image_copy`, and `autoexposure` are implemented in WGSL shaders.
 Earlier revisions executed the last four operations on the CPU, but they now run on the GPU as well.
 Op classes map these kernels through the standard Engine API and are validated against the CPU backend.
 
@@ -102,7 +102,7 @@ They pass if
 ## Next Steps / Perspective
 
 Priority	Task	Brief Description
-P0	Element-wise kernels	Add remaining simple ops (add, mul, softplus, etc.) using inline WGSL.
+P0      Element-wise kernels    **Done** – WGSL implementations of add, mul, and softplus are available.
 P1	Memory allocator	Replace the “one buffer per tensor” strategy with a sub-allocator to reduce memory & improve performance.
 P1	Graph execution	Record multiple layers in a single command buffer to amortise overhead.
 P2	Full denoiser demo	Make examples/denoise run on a 256×256 tile using the WebGPU backend.

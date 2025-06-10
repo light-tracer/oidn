@@ -52,12 +52,26 @@ OIDN_NAMESPACE_BEGIN
     void pool2x2(const WebGPUTensor& src,
                  const WebGPUTensor& dst);
 
+    void add(const WebGPUTensor& A,
+             const WebGPUTensor& B,
+             const WebGPUTensor& dst);
+
+    void mul(const WebGPUTensor& A,
+             const WebGPUTensor& B,
+             const WebGPUTensor& dst);
+
+    void softplus(const WebGPUTensor& src,
+                  const WebGPUTensor& dst);
+
     void sync();
 
   private:
     void initPipeline();
     void initUpsamplePipeline();
     void initPoolPipeline();
+    void initAddPipeline();
+    void initMulPipeline();
+    void initSoftplusPipeline();
 
     WebGPUDevice* device;
 
@@ -75,6 +89,21 @@ OIDN_NAMESPACE_BEGIN
     WGPUBindGroupLayout poolBindGroupLayout = nullptr;
     WGPUPipelineLayout poolPipelineLayout = nullptr;
     WGPUComputePipeline poolPipeline = nullptr;
+
+    WGPUShaderModule addShaderModule = nullptr;
+    WGPUBindGroupLayout addBindGroupLayout = nullptr;
+    WGPUPipelineLayout addPipelineLayout = nullptr;
+    WGPUComputePipeline addPipeline = nullptr;
+
+    WGPUShaderModule mulShaderModule = nullptr;
+    WGPUBindGroupLayout mulBindGroupLayout = nullptr;
+    WGPUPipelineLayout mulPipelineLayout = nullptr;
+    WGPUComputePipeline mulPipeline = nullptr;
+
+    WGPUShaderModule softplusShaderModule = nullptr;
+    WGPUBindGroupLayout softplusBindGroupLayout = nullptr;
+    WGPUPipelineLayout softplusPipelineLayout = nullptr;
+    WGPUComputePipeline softplusPipeline = nullptr;
 
     struct PendingReadback
     {
