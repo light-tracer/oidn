@@ -74,8 +74,9 @@ Fixed stride = 1, no padding, arbitrary N,C,H,W.
 Work-group size hard-coded to 8×8×1.
 Host ↔ GPU transfers use the public buffer API (`oidnNewBuffer`, `oidnWriteBuffer`,
 `oidnReadBuffer`).
-Currently three kernels are hooked up: `conv2d_eltwise`, `pool2x2`, and `upsample2x`.
-Op classes WebGPUConv/WebGPUPool/WebGPUUpsample expose these through the standard Engine API and are validated against the CPU backend.
+Currently kernels for `conv2d_eltwise`, `pool2x2`, and `upsample2x` are implemented in WGSL shaders.
+Additional host-side implementations provide `input_process`, `output_process`, `image_copy`, and `autoexposure` so the basic filter pipeline runs end-to-end.
+Op classes map these kernels through the standard Engine API and are validated against the CPU backend.
 
 The Metal backend serves as the reference implementation.  It uses NHWC tensor
 layout with OIHW weights.  The WebGPU backend now adopts the same layouts and
@@ -101,7 +102,7 @@ They pass if
 ## Next Steps / Perspective
 
 Priority	Task	Brief Description
-P0	More primitive kernels	Implement pooled, upsample, element-wise, softplus, etc. Follow the same inline-WGSL approach.
+P0	Element-wise kernels	Add remaining simple ops (add, mul, softplus, etc.) using inline WGSL.
 P1	Memory allocator	Replace the “one buffer per tensor” strategy with a sub-allocator to reduce memory & improve performance.
 P1	Graph execution	Record multiple layers in a single command buffer to amortise overhead.
 P2	Full denoiser demo	Make examples/denoise run on a 256×256 tile using the WebGPU backend.

@@ -4,6 +4,10 @@
 #include "webgpu_conv.h"
 #include "webgpu_pool.h"
 #include "webgpu_upsample.h"
+#include "webgpu_input_process.h"
+#include "webgpu_output_process.h"
+#include "webgpu_image_copy.h"
+#include "webgpu_autoexposure.h"
 #include <cmath>
 #include <cstring>
 
@@ -150,24 +154,24 @@ OIDN_NAMESPACE_BEGIN
     return makeRef<WebGPUUpsample>(this, desc);
   }
 
-  Ref<Autoexposure> WebGPUEngine::newAutoexposure(const ImageDesc&)
+  Ref<Autoexposure> WebGPUEngine::newAutoexposure(const ImageDesc& desc)
   {
-    throw std::logic_error("operation is not implemented");
+    return makeRef<WebGPUAutoexposure>(this, desc);
   }
 
-  Ref<InputProcess> WebGPUEngine::newInputProcess(const InputProcessDesc&)
+  Ref<InputProcess> WebGPUEngine::newInputProcess(const InputProcessDesc& desc)
   {
-    throw std::logic_error("operation is not implemented");
+    return makeRef<WebGPUInputProcess>(this, desc);
   }
 
-  Ref<OutputProcess> WebGPUEngine::newOutputProcess(const OutputProcessDesc&)
+  Ref<OutputProcess> WebGPUEngine::newOutputProcess(const OutputProcessDesc& desc)
   {
-    throw std::logic_error("operation is not implemented");
+    return makeRef<WebGPUOutputProcess>(this, desc);
   }
 
   Ref<ImageCopy> WebGPUEngine::newImageCopy()
   {
-    throw std::logic_error("operation is not implemented");
+    return makeRef<WebGPUImageCopy>(this);
   }
 
   void WebGPUEngine::submitHostFunc(std::function<void()>&& f,
