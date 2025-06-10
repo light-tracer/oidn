@@ -6,7 +6,7 @@ OIDN_NAMESPACE_BEGIN
   class WebGPUDeviceFactory : public DeviceFactory
   {
   public:
-    Ref<Device> newDevice(const Ref<PhysicalDevice>& physicalDevice) override
+    Ref<Device> newDevice(const Ref<PhysicalDevice>& /*physicalDevice*/) override
     {
       return makeRef<WebGPUDevice>();
     }

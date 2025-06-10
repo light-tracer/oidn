@@ -718,7 +718,7 @@ OIDN_NAMESPACE_BEGIN
   }
 
   static void dispatch1D(WebGPUDevice* dev, WGPUComputePipeline pipeline,
-                         WGPUBindGroupLayout layout, WGPUShaderModule module,
+                         WGPUBindGroupLayout layout,
                          WGPUBindGroupEntry* entries, int entryCount,
                          uint32_t size)
   {
@@ -756,7 +756,7 @@ OIDN_NAMESPACE_BEGIN
     entries[1].binding = 1; entries[1].buffer = B.buf; entries[1].size = size*sizeof(float);
     entries[2].binding = 2; entries[2].buffer = dst.buf; entries[2].size = size*sizeof(float);
     entries[3].binding = 3; entries[3].buffer = sizeBuf; entries[3].size = sizeof(uint32_t);
-    dispatch1D(device, addPipeline, addBindGroupLayout, addShaderModule, entries, 4, size);
+    dispatch1D(device, addPipeline, addBindGroupLayout, entries, 4, size);
     if (dst.type == WebGPUTensorType::OUTPUT)
     {
       WGPUBuffer readback = device->createBuffer(size*sizeof(float),
@@ -786,7 +786,7 @@ OIDN_NAMESPACE_BEGIN
     entries[1].binding = 1; entries[1].buffer = B.buf; entries[1].size = size*sizeof(float);
     entries[2].binding = 2; entries[2].buffer = dst.buf; entries[2].size = size*sizeof(float);
     entries[3].binding = 3; entries[3].buffer = sizeBuf; entries[3].size = sizeof(uint32_t);
-    dispatch1D(device, mulPipeline, mulBindGroupLayout, mulShaderModule, entries, 4, size);
+    dispatch1D(device, mulPipeline, mulBindGroupLayout, entries, 4, size);
     if (dst.type == WebGPUTensorType::OUTPUT)
     {
       WGPUBuffer readback = device->createBuffer(size*sizeof(float),
@@ -814,7 +814,7 @@ OIDN_NAMESPACE_BEGIN
     entries[0].binding = 0; entries[0].buffer = src.buf; entries[0].size = size*sizeof(float);
     entries[1].binding = 1; entries[1].buffer = dst.buf; entries[1].size = size*sizeof(float);
     entries[2].binding = 2; entries[2].buffer = sizeBuf; entries[2].size = sizeof(uint32_t);
-    dispatch1D(device, softplusPipeline, softplusBindGroupLayout, softplusShaderModule, entries, 3, size);
+    dispatch1D(device, softplusPipeline, softplusBindGroupLayout, entries, 3, size);
     if (dst.type == WebGPUTensorType::OUTPUT)
     {
       WGPUBuffer readback = device->createBuffer(size*sizeof(float),
