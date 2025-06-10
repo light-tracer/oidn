@@ -64,11 +64,14 @@ devices/webgpu/
 
 ### Implementation details
 Raw C API of wgpu-native, no wgpu:: C++ wrapper.
-WGSL for conv2d + Bias + ReLU and 2× upsampling live as inline string literals
-inside webgpu_engine.cpp; no external .wgsl files are shipped.
+WGSL shaders implement conv2d + bias + ReLU and 2× upsampling.  They live as
+inline string literals inside `webgpu_engine.cpp`; no external `.wgsl` files are
+shipped.
 Fixed stride = 1, no padding, arbitrary N,C,H,W.
 Work-group size hard-coded to 8×8×1.
 Host ↔ GPU transfers: naïve per-tensor buffers (CreateBuffer + Map).
+Currently two kernels are hooked up: `conv2d_eltwise` and `upsample2x`. Both are
+tested against the CPU backend for bitwise correctness.
 
 ## Verification Procedure
 Build with -DOIDN_DEVICE_WEBGPU=ON.
@@ -80,11 +83,12 @@ Run: ctest --output-on-failure -R WebGPU
 
 The tests internally:
 
-prepares deterministic random tensors,
-executes the convolution using the CPU backend to get the reference output,
-runs the same layer on the WebGPU backend,
-declares success if
-max( |ref - gpu| / max(|ref|, 1e-6) ) < 1e-4.
+* prepare deterministic random tensors,
+* execute the kernels using the CPU backend to obtain reference results, and
+* run the same kernels on the WebGPU backend.
+
+They pass if
+`max(|ref - gpu| / max(|ref|, 1e-6)) < 1e-4`.
 
 ## Next Steps / Perspective
 
