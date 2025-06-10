@@ -18,3 +18,13 @@ target_include_directories(webgpu_upsample_test PRIVATE ${PROJECT_SOURCE_DIR}/de
 target_include_directories(webgpu_upsample_test PRIVATE ${PROJECT_SOURCE_DIR})
 target_link_libraries(webgpu_upsample_test PRIVATE OpenImageDenoise OpenImageDenoise_core OpenImageDenoise_device_cpu GTest::GTest GTest::Main)
 add_test(NAME WebGPU.Upsample COMMAND webgpu_upsample_test)
+
+add_executable(webgpu_pool_test test_webgpu_pool.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_helper.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_engine.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_device.cpp)
+target_include_directories(webgpu_pool_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/webgpu)
+target_include_directories(webgpu_pool_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/cpu)
+target_include_directories(webgpu_pool_test PRIVATE ${PROJECT_SOURCE_DIR})
+target_link_libraries(webgpu_pool_test PRIVATE OpenImageDenoise OpenImageDenoise_core OpenImageDenoise_device_cpu GTest::GTest GTest::Main)
+add_test(NAME WebGPU.Pool COMMAND webgpu_pool_test)

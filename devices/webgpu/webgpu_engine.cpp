@@ -44,6 +44,35 @@ OIDN_NAMESPACE_BEGIN
   }
   )wgsl";
 
+  static const char* kPoolWGSL = R"wgsl(
+  struct Tensor { data: array<f32>; };
+
+  @group(0) @binding(0) var<storage, read>  src : Tensor;
+  @group(0) @binding(1) var<storage, read_write> dst : Tensor;
+  struct Size { n: u32, c: u32, h: u32, w: u32, oh: u32, ow: u32; };
+  @group(0) @binding(2) var<uniform> size: Size;
+
+  @compute @workgroup_size(8, 8, 1)
+  fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let ox = gid.x;
+    let oy = gid.y;
+    let c  = gid.z;
+    if (ox >= size.ow || oy >= size.oh || c >= size.c) { return; }
+    let ix = ox * 2u;
+    let iy = oy * 2u;
+    let srcIdx0 = (((0u * size.c + c) * size.h + iy) * size.w + ix);
+    let srcIdx1 = srcIdx0 + 1u;
+    let srcIdx2 = srcIdx0 + size.w;
+    let srcIdx3 = srcIdx2 + 1u;
+    var m = src.data[srcIdx0];
+    if (src.data[srcIdx1] > m) { m = src.data[srcIdx1]; }
+    if (src.data[srcIdx2] > m) { m = src.data[srcIdx2]; }
+    if (src.data[srcIdx3] > m) { m = src.data[srcIdx3]; }
+    let dstIdx = (((0u * size.c + c) * size.oh + oy) * size.ow + ox);
+    dst.data[dstIdx] = m;
+  }
+  )wgsl";
+
   static const char* kUpsampleWGSL = R"wgsl(
   struct Tensor { data: array<f32>; };
 
@@ -79,6 +108,10 @@ OIDN_NAMESPACE_BEGIN
     if (upsamplePipelineLayout)  wgpuPipelineLayoutRelease(upsamplePipelineLayout);
     if (upsampleBindGroupLayout) wgpuBindGroupLayoutRelease(upsampleBindGroupLayout);
     if (upsampleShaderModule)    wgpuShaderModuleRelease(upsampleShaderModule);
+    if (poolPipeline)        wgpuComputePipelineRelease(poolPipeline);
+    if (poolPipelineLayout)  wgpuPipelineLayoutRelease(poolPipelineLayout);
+    if (poolBindGroupLayout) wgpuBindGroupLayoutRelease(poolBindGroupLayout);
+    if (poolShaderModule)    wgpuShaderModuleRelease(poolShaderModule);
   }
 
   Device* WebGPUEngine::getDevice() const
@@ -228,6 +261,52 @@ OIDN_NAMESPACE_BEGIN
     upsamplePipeline = wgpuDeviceCreateComputePipeline(device->device, &cpDesc);
   }
 
+  void WebGPUEngine::initPoolPipeline()
+  {
+    if (poolPipeline)
+      return;
+
+    WGPUShaderSourceWGSL source{};
+    source.chain.next = nullptr;
+    source.chain.sType = WGPUSType_ShaderSourceWGSL;
+    source.code = { kPoolWGSL, strlen(kPoolWGSL) };
+
+    WGPUShaderModuleDescriptor smDesc{};
+    smDesc.nextInChain = reinterpret_cast<const WGPUChainedStruct*>(&source);
+    smDesc.label = { nullptr, 0 };
+
+    poolShaderModule = wgpuDeviceCreateShaderModule(device->device, &smDesc);
+
+    WGPUBindGroupLayoutEntry entries[3] = {};
+    entries[0].binding = 0; entries[0].visibility = WGPUShaderStage_Compute;
+    entries[0].buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
+    entries[1].binding = 1; entries[1].visibility = WGPUShaderStage_Compute;
+    entries[1].buffer.type = WGPUBufferBindingType_Storage;
+    entries[2].binding = 2; entries[2].visibility = WGPUShaderStage_Compute;
+    entries[2].buffer.type = WGPUBufferBindingType_Uniform;
+
+    WGPUBindGroupLayoutDescriptor bglDesc{};
+    bglDesc.entryCount = 3;
+    bglDesc.entries = entries;
+    poolBindGroupLayout = wgpuDeviceCreateBindGroupLayout(device->device, &bglDesc);
+
+    WGPUPipelineLayoutDescriptor plDesc{};
+    plDesc.bindGroupLayoutCount = 1;
+    plDesc.bindGroupLayouts = &poolBindGroupLayout;
+    poolPipelineLayout = wgpuDeviceCreatePipelineLayout(device->device, &plDesc);
+
+    WGPUComputePipelineDescriptor cpDesc{};
+    cpDesc.layout = poolPipelineLayout;
+    cpDesc.compute.module = poolShaderModule;
+    WGPUStringView mainEntry{ "main", WGPU_STRLEN };
+    cpDesc.compute.entryPoint = mainEntry;
+    cpDesc.compute.nextInChain = nullptr;
+    cpDesc.compute.constantCount = 0;
+    cpDesc.compute.constants = nullptr;
+    cpDesc.label = { nullptr, 0 };
+    poolPipeline = wgpuDeviceCreateComputePipeline(device->device, &cpDesc);
+  }
+
   WebGPUTensor WebGPUEngine::newTensor(const float* data, WebGPUTensorType type,
                                        uint32_t n, uint32_t c, uint32_t h, uint32_t w)
   {
@@ -333,6 +412,58 @@ OIDN_NAMESPACE_BEGIN
     WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(device->device, nullptr);
     WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(enc, nullptr);
     wgpuComputePassEncoderSetPipeline(pass, upsamplePipeline);
+    wgpuComputePassEncoderSetBindGroup(pass, 0, bg, 0, nullptr);
+    wgpuComputePassEncoderDispatchWorkgroups(pass, (ow+7)/8, (oh+7)/8, src.c);
+    wgpuComputePassEncoderEnd(pass);
+    wgpuComputePassEncoderRelease(pass);
+
+    if (dst.type == WebGPUTensorType::OUTPUT)
+    {
+      size_t outBytes = dst.n*dst.c*oh*ow*sizeof(float);
+      WGPUBuffer readback = device->createBuffer(outBytes,
+                          WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
+      wgpuCommandEncoderCopyBufferToBuffer(enc, dst.buf, 0, readback, 0, outBytes);
+      readbacks.push_back({dst.buf, readback, outputHosts[dst.buf], outBytes});
+    }
+
+    WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(enc, nullptr);
+    device->submit(cmd);
+    wgpuCommandBufferRelease(cmd);
+    wgpuCommandEncoderRelease(enc);
+    wgpuBufferRelease(sizeBuf);
+    wgpuBindGroupRelease(bg);
+  }
+
+  void WebGPUEngine::pool2x2(const WebGPUTensor& src,
+                              const WebGPUTensor& dst)
+  {
+    initPoolPipeline();
+
+    struct Size
+    {
+      uint32_t n, c, h, w, oh, ow;
+    } size = {src.n, src.c, src.h, src.w, src.h/2, src.w/2};
+
+    uint32_t oh = src.h / 2;
+    uint32_t ow = src.w / 2;
+    WGPUBuffer sizeBuf = device->createBuffer(sizeof(Size),
+                              WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst,
+                              &size);
+
+    WGPUBindGroupEntry entries[3] = {};
+    entries[0].binding = 0; entries[0].buffer = src.buf; entries[0].size = src.n*src.c*src.h*src.w*sizeof(float);
+    entries[1].binding = 1; entries[1].buffer = dst.buf; entries[1].size = dst.n*dst.c*oh*ow*sizeof(float);
+    entries[2].binding = 2; entries[2].buffer = sizeBuf; entries[2].size = sizeof(Size);
+
+    WGPUBindGroupDescriptor bgDesc{};
+    bgDesc.layout = poolBindGroupLayout;
+    bgDesc.entryCount = 3;
+    bgDesc.entries = entries;
+    WGPUBindGroup bg = wgpuDeviceCreateBindGroup(device->device, &bgDesc);
+
+    WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(device->device, nullptr);
+    WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(enc, nullptr);
+    wgpuComputePassEncoderSetPipeline(pass, poolPipeline);
     wgpuComputePassEncoderSetBindGroup(pass, 0, bg, 0, nullptr);
     wgpuComputePassEncoderDispatchWorkgroups(pass, (ow+7)/8, (oh+7)/8, src.c);
     wgpuComputePassEncoderEnd(pass);
