@@ -69,7 +69,8 @@ inline string literals inside `webgpu_engine.cpp`; no external `.wgsl` files are
 shipped.
 Fixed stride = 1, no padding, arbitrary N,C,H,W.
 Work-group size hard-coded to 8×8×1.
-Host ↔ GPU transfers: naïve per-tensor buffers (CreateBuffer + Map).
+Host ↔ GPU transfers use the public buffer API (`oidnNewBuffer`, `oidnWriteBuffer`,
+`oidnReadBuffer`).
 Currently three kernels are hooked up: `conv2d_eltwise`, `pool2x2`, and `upsample2x`.
 All are tested against the CPU backend for bitwise correctness.
 
@@ -93,7 +94,6 @@ They pass if
 ## Next Steps / Perspective
 
 Priority	Task	Brief Description
-P0	Public buffer API	Support oidnNewBuffer / oidnReadBuffer so users can upload & download tensors without the private engine helpers.
 P0	More primitive kernels	Implement pooled, upsample, element-wise, softplus, etc. Follow the same inline-WGSL approach.
 P1	Memory allocator	Replace the “one buffer per tensor” strategy with a sub-allocator to reduce memory & improve performance.
 P1	Graph execution	Record multiple layers in a single command buffer to amortise overhead.

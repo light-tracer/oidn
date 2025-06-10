@@ -1,5 +1,6 @@
 set(_srcs
   webgpu_device.cpp
+  webgpu_buffer.cpp
   webgpu_engine.cpp
   webgpu_module.cpp
   webgpu_helper.cpp)

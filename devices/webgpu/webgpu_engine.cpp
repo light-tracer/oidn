@@ -1,5 +1,6 @@
 #include "webgpu_engine.h"
 #include "webgpu_device.h"
+#include "webgpu_buffer.h"
 #include <cmath>
 #include <cstring>
 
@@ -117,6 +118,17 @@ OIDN_NAMESPACE_BEGIN
   Device* WebGPUEngine::getDevice() const
   {
     return device;
+  }
+
+  Ref<Buffer> WebGPUEngine::newBuffer(size_t byteSize, Storage)
+  {
+    return makeRef<WebGPUBuffer>(this, byteSize);
+  }
+
+  Ref<Buffer> WebGPUEngine::newBuffer(void*, size_t)
+  {
+    throw Exception(Error::InvalidOperation,
+      "creating shared buffers is not supported by the WebGPU backend");
   }
 
   Ref<Conv> WebGPUEngine::newConv(const ConvDesc&)
@@ -323,6 +335,21 @@ OIDN_NAMESPACE_BEGIN
     if (type == WebGPUTensorType::OUTPUT)
       outputHosts[buf] = const_cast<float*>(data);
     return {buf,0,n,c,h,w,type};
+  }
+
+  WebGPUTensor WebGPUEngine::newTensor(const BufferRef& buffer, WebGPUTensorType type,
+                                       uint32_t n, uint32_t c, uint32_t h, uint32_t w)
+  {
+    Buffer* bufObj = reinterpret_cast<Buffer*>(buffer.getHandle());
+    WebGPUBuffer* wb = dynamic_cast<WebGPUBuffer*>(bufObj);
+    if (!wb)
+      throw Exception(Error::InvalidArgument, "buffer is not a WebGPU buffer");
+
+    size_t count = size_t(n) * c * h * w;
+    if (count * sizeof(float) > wb->getByteSize())
+      throw Exception(Error::InvalidArgument, "buffer size is too small");
+
+    return {wb->getWGPUBuffer(), 0, n, c, h, w, type};
   }
 
   void WebGPUEngine::conv2d_eltwise(const WebGPUTensor& src,

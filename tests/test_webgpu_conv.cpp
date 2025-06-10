@@ -1,3 +1,4 @@
+#include "OpenImageDenoise/oidn.hpp"
 #include "OpenImageDenoise/webgpu.h"
 #include "../devices/webgpu/webgpu_engine.h"
 #include "../devices/cpu/cpu_device.h"
@@ -111,13 +112,23 @@ TEST(WebGPU, Conv2d)
       }
   }
 
-  auto A = eng->newTensor(src, WebGPUTensorType::INPUT, N,C,H,W);
-  auto Wt= eng->newTensor(weight, WebGPUTensorType::CONST, OC,IC,KH,KW);
-  auto B = eng->newTensor(bias, WebGPUTensorType::CONST, OC,1,1,1);
-  auto O = eng->newTensor(out, WebGPUTensorType::OUTPUT, OC,1,OH,OW);
+  auto srcBuf = dev.newBuffer(sizeof(src));
+  srcBuf.write(0, sizeof(src), src);
+  auto wBuf = dev.newBuffer(sizeof(weight));
+  wBuf.write(0, sizeof(weight), weight);
+  auto bBuf = dev.newBuffer(sizeof(bias));
+  bBuf.write(0, sizeof(bias), bias);
+  auto outBuf = dev.newBuffer(sizeof(out));
+
+  auto A = eng->newTensor(srcBuf, WebGPUTensorType::INPUT, N,C,H,W);
+  auto Wt= eng->newTensor(wBuf, WebGPUTensorType::CONST, OC,IC,KH,KW);
+  auto B = eng->newTensor(bBuf, WebGPUTensorType::CONST, OC,1,1,1);
+  auto O = eng->newTensor(outBuf, WebGPUTensorType::OUTPUT, OC,1,OH,OW);
 
   eng->conv2d_eltwise(A,Wt,B,O);
   eng->sync();
+
+  outBuf.read(0, sizeof(out), out);
 
   for(size_t i=0;i<OC*OH*OW;++i)
     ASSERT_NEAR(out[i], ref[i], 1e-4f);
