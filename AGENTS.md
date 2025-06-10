@@ -70,8 +70,8 @@ shipped.
 Fixed stride = 1, no padding, arbitrary N,C,H,W.
 Work-group size hard-coded to 8×8×1.
 Host ↔ GPU transfers: naïve per-tensor buffers (CreateBuffer + Map).
-Currently two kernels are hooked up: `conv2d_eltwise` and `upsample2x`. Both are
-tested against the CPU backend for bitwise correctness.
+Currently three kernels are hooked up: `conv2d_eltwise`, `pool2x2`, and `upsample2x`.
+All are tested against the CPU backend for bitwise correctness.
 
 ## Verification Procedure
 Build with -DOIDN_DEVICE_WEBGPU=ON.
