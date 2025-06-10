@@ -124,3 +124,20 @@ target_include_directories(webgpu_autoexposure_test PRIVATE ${PROJECT_SOURCE_DIR
 target_include_directories(webgpu_autoexposure_test PRIVATE ${PROJECT_SOURCE_DIR})
 target_link_libraries(webgpu_autoexposure_test PRIVATE OpenImageDenoise OpenImageDenoise_core OpenImageDenoise_device_cpu GTest::GTest GTest::Main)
 add_test(NAME WebGPU.Autoexposure COMMAND webgpu_autoexposure_test)
+
+add_executable(webgpu_eltwise_test test_webgpu_eltwise.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_helper.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_engine.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_conv.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_pool.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_upsample.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_input_process.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_output_process.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_image_copy.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_autoexposure.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_buffer.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_device.cpp)
+target_include_directories(webgpu_eltwise_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/webgpu)
+target_include_directories(webgpu_eltwise_test PRIVATE ${PROJECT_SOURCE_DIR})
+target_link_libraries(webgpu_eltwise_test PRIVATE OpenImageDenoise OpenImageDenoise_core GTest::GTest GTest::Main)
+add_test(NAME WebGPU.Eltwise COMMAND webgpu_eltwise_test)
