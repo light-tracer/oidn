@@ -1,4 +1,4 @@
-set(_srcs
+set(OIDN_WEBGPU_SOURCES
   webgpu_device.cpp
   webgpu_buffer.cpp
   webgpu_heap.cpp
@@ -13,8 +13,22 @@ set(_srcs
   webgpu_autoexposure.cpp
   webgpu_module.cpp
   webgpu_helper.cpp)
-set(OIDN_WEBGPU_SOURCES ${_srcs} PARENT_SCOPE)
-list(TRANSFORM _srcs PREPEND ${CMAKE_CURRENT_SOURCE_DIR}/)
-set(OIDN_WEBGPU_SOURCE_FILES ${_srcs} PARENT_SCOPE)
 
-# Sources are added to OpenImageDenoise target from top-level CMake
+add_library(OpenImageDenoise_device_webgpu ${OIDN_LIB_TYPE} ${OIDN_WEBGPU_SOURCES} ${OIDN_RESOURCE_FILE})
+
+set_target_properties(OpenImageDenoise_device_webgpu PROPERTIES
+  OUTPUT_NAME ${OIDN_LIBRARY_NAME}_device_webgpu
+  CXX_STANDARD 17)
+if(OIDN_LIBRARY_VERSIONED)
+  set_target_properties(OpenImageDenoise_device_webgpu PROPERTIES VERSION ${PROJECT_VERSION})
+endif()
+
+target_include_directories(OpenImageDenoise_device_webgpu PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(OpenImageDenoise_device_webgpu PRIVATE OpenImageDenoise_core wgpu_native)
+
+if(OIDN_STATIC_LIB)
+  oidn_install_static_module(OpenImageDenoise_device_webgpu)
+  target_link_libraries(OpenImageDenoise PRIVATE OpenImageDenoise_device_webgpu)
+else()
+  oidn_install_module(OpenImageDenoise_device_webgpu)
+endif()

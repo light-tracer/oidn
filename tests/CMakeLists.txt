@@ -1,159 +1,20 @@
 find_package(GTest REQUIRED)
-add_executable(webgpu_conv_test test_webgpu_conv.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_helper.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_engine.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_conv.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_pool.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_upsample.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_input_process.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_output_process.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_image_copy.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_autoexposure.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_heap.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_arena.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_buffer.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_device.cpp)
-target_include_directories(webgpu_conv_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/webgpu)
-target_include_directories(webgpu_conv_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/cpu)
-target_include_directories(webgpu_conv_test PRIVATE ${PROJECT_SOURCE_DIR})
-target_link_libraries(webgpu_conv_test PRIVATE OpenImageDenoise OpenImageDenoise_core OpenImageDenoise_device_cpu GTest::GTest GTest::Main)
-add_test(NAME WebGPU.Conv2d COMMAND webgpu_conv_test)
 
-add_executable(webgpu_upsample_test test_webgpu_upsample.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_helper.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_engine.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_conv.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_pool.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_upsample.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_input_process.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_output_process.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_image_copy.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_autoexposure.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_heap.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_arena.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_buffer.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_device.cpp)
-target_include_directories(webgpu_upsample_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/webgpu)
-target_include_directories(webgpu_upsample_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/cpu)
-target_include_directories(webgpu_upsample_test PRIVATE ${PROJECT_SOURCE_DIR})
-target_link_libraries(webgpu_upsample_test PRIVATE OpenImageDenoise OpenImageDenoise_core OpenImageDenoise_device_cpu GTest::GTest GTest::Main)
-add_test(NAME WebGPU.Upsample COMMAND webgpu_upsample_test)
+function(add_webgpu_test exe test_name source)
+  add_executable(${exe} ${source})
+  target_include_directories(${exe} PRIVATE ${PROJECT_SOURCE_DIR}/devices/webgpu)
+  target_include_directories(${exe} PRIVATE ${PROJECT_SOURCE_DIR}/devices/cpu)
+  target_include_directories(${exe} PRIVATE ${PROJECT_SOURCE_DIR})
+  target_include_directories(${exe} PRIVATE ${OIDN_WGPU_DIR}/include)
+  target_link_libraries(${exe} PRIVATE OpenImageDenoise OpenImageDenoise_core OpenImageDenoise_device_cpu OpenImageDenoise_device_webgpu GTest::GTest GTest::Main)
+  add_test(NAME ${test_name} COMMAND ${exe})
+endfunction()
 
-add_executable(webgpu_pool_test test_webgpu_pool.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_helper.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_engine.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_conv.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_pool.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_upsample.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_input_process.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_output_process.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_image_copy.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_autoexposure.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_heap.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_arena.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_buffer.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_device.cpp)
-target_include_directories(webgpu_pool_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/webgpu)
-target_include_directories(webgpu_pool_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/cpu)
-target_include_directories(webgpu_pool_test PRIVATE ${PROJECT_SOURCE_DIR})
-target_link_libraries(webgpu_pool_test PRIVATE OpenImageDenoise OpenImageDenoise_core OpenImageDenoise_device_cpu GTest::GTest GTest::Main)
-add_test(NAME WebGPU.Pool COMMAND webgpu_pool_test)
-
-add_executable(webgpu_input_process_test test_webgpu_input_process.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_helper.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_engine.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_conv.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_pool.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_upsample.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_input_process.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_output_process.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_image_copy.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_autoexposure.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_heap.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_arena.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_buffer.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_device.cpp)
-target_include_directories(webgpu_input_process_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/webgpu)
-target_include_directories(webgpu_input_process_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/cpu)
-target_include_directories(webgpu_input_process_test PRIVATE ${PROJECT_SOURCE_DIR})
-target_link_libraries(webgpu_input_process_test PRIVATE OpenImageDenoise OpenImageDenoise_core OpenImageDenoise_device_cpu GTest::GTest GTest::Main)
-add_test(NAME WebGPU.InputProcess COMMAND webgpu_input_process_test)
-
-add_executable(webgpu_output_process_test test_webgpu_output_process.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_helper.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_engine.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_conv.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_pool.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_upsample.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_input_process.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_output_process.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_image_copy.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_autoexposure.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_heap.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_arena.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_buffer.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_device.cpp)
-target_include_directories(webgpu_output_process_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/webgpu)
-target_include_directories(webgpu_output_process_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/cpu)
-target_include_directories(webgpu_output_process_test PRIVATE ${PROJECT_SOURCE_DIR})
-target_link_libraries(webgpu_output_process_test PRIVATE OpenImageDenoise OpenImageDenoise_core OpenImageDenoise_device_cpu GTest::GTest GTest::Main)
-add_test(NAME WebGPU.OutputProcess COMMAND webgpu_output_process_test)
-
-add_executable(webgpu_image_copy_test test_webgpu_image_copy.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_helper.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_engine.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_conv.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_pool.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_upsample.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_input_process.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_output_process.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_image_copy.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_autoexposure.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_heap.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_arena.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_buffer.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_device.cpp)
-target_include_directories(webgpu_image_copy_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/webgpu)
-target_include_directories(webgpu_image_copy_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/cpu)
-target_include_directories(webgpu_image_copy_test PRIVATE ${PROJECT_SOURCE_DIR})
-target_link_libraries(webgpu_image_copy_test PRIVATE OpenImageDenoise OpenImageDenoise_core OpenImageDenoise_device_cpu GTest::GTest GTest::Main)
-add_test(NAME WebGPU.ImageCopy COMMAND webgpu_image_copy_test)
-
-add_executable(webgpu_autoexposure_test test_webgpu_autoexposure.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_helper.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_engine.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_conv.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_pool.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_upsample.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_input_process.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_output_process.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_image_copy.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_autoexposure.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_heap.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_arena.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_buffer.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_device.cpp)
-target_include_directories(webgpu_autoexposure_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/webgpu)
-target_include_directories(webgpu_autoexposure_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/cpu)
-target_include_directories(webgpu_autoexposure_test PRIVATE ${PROJECT_SOURCE_DIR})
-target_link_libraries(webgpu_autoexposure_test PRIVATE OpenImageDenoise OpenImageDenoise_core OpenImageDenoise_device_cpu GTest::GTest GTest::Main)
-add_test(NAME WebGPU.Autoexposure COMMAND webgpu_autoexposure_test)
-
-add_executable(webgpu_eltwise_test test_webgpu_eltwise.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_helper.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_engine.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_conv.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_pool.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_upsample.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_input_process.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_output_process.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_image_copy.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_autoexposure.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_heap.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_arena.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_buffer.cpp
-  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_device.cpp)
-target_include_directories(webgpu_eltwise_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/webgpu)
-target_include_directories(webgpu_eltwise_test PRIVATE ${PROJECT_SOURCE_DIR})
-target_link_libraries(webgpu_eltwise_test PRIVATE OpenImageDenoise OpenImageDenoise_core GTest::GTest GTest::Main)
-add_test(NAME WebGPU.Eltwise COMMAND webgpu_eltwise_test)
+add_webgpu_test(webgpu_conv_test WebGPU.Conv2d test_webgpu_conv.cpp)
+add_webgpu_test(webgpu_upsample_test WebGPU.Upsample test_webgpu_upsample.cpp)
+add_webgpu_test(webgpu_pool_test WebGPU.Pool test_webgpu_pool.cpp)
+add_webgpu_test(webgpu_input_process_test WebGPU.InputProcess test_webgpu_input_process.cpp)
+add_webgpu_test(webgpu_output_process_test WebGPU.OutputProcess test_webgpu_output_process.cpp)
+add_webgpu_test(webgpu_image_copy_test WebGPU.ImageCopy test_webgpu_image_copy.cpp)
+add_webgpu_test(webgpu_autoexposure_test WebGPU.Autoexposure test_webgpu_autoexposure.cpp)
+add_webgpu_test(webgpu_eltwise_test WebGPU.Eltwise test_webgpu_eltwise.cpp)
