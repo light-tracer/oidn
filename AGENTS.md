@@ -29,9 +29,9 @@ Set the `VK_ICD_FILENAMES` environment variable before running tests:
 
 ```bash
 export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json
-cd build && ctest --output-on-failure -R WebGPU.Conv2d
+cd build && ctest --output-on-failure -R WebGPU
 ```
-This forces the Vulkan loader to use Lavapipe so the WebGPU unit test runs
+This forces the Vulkan loader to use Lavapipe so the WebGPU unit tests run
 entirely in software.
 
 ### WebGPU
@@ -58,14 +58,14 @@ Source tree:
 
 devices/webgpu/
   ├─ webgpu_device.h / .cpp      # owns WGPUInstance/Device/Queue
-  ├─ webgpu_engine.h / .cpp      # records 1 compute pass
+  ├─ webgpu_engine.h / .cpp      # records compute passes
   ├─ webgpu_tensor.h             # POD for tensor views
   └─ CMakeLists.txt              # adds option OIDN_DEVICE_WEBGPU
 
 ### Implementation details
 Raw C API of wgpu-native, no wgpu:: C++ wrapper.
-WGSL for conv2d + Bias + ReLU lives as an inline string literal
-inside webgpu_engine.cpp; no external .wgsl file is shipped.
+WGSL for conv2d + Bias + ReLU and 2× upsampling live as inline string literals
+inside webgpu_engine.cpp; no external .wgsl files are shipped.
 Fixed stride = 1, no padding, arbitrary N,C,H,W.
 Work-group size hard-coded to 8×8×1.
 Host ↔ GPU transfers: naïve per-tensor buffers (CreateBuffer + Map).
@@ -76,13 +76,13 @@ Build with -DOIDN_DEVICE_WEBGPU=ON.
 Ensure environment selects a usable backend
 Hardware Vulkan/Metal or Lavapipe SW fallback.
 
-Run: ctest --output-on-failure -R WebGPU.Conv2d
+Run: ctest --output-on-failure -R WebGPU
 
-The test internally:
+The tests internally:
 
-prepares deterministic random tensors,
-runs the exact same layer on CPU & WebGPU,
-declares success if
+prepare deterministic random tensors,
+run the same operation on CPU and WebGPU,
+and declare success if
 max( |ref - gpu| / max(|ref|, 1e-6) ) < 1e-4.
 
 ## Next Steps / Perspective
