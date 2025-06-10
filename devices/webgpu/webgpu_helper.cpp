@@ -3,11 +3,12 @@
 
 OIDN_NAMESPACE_BEGIN
 
-  WebGPUEngine* getEngine(DeviceRef device)
+  __attribute__((visibility("default"))) __attribute__((used)) WebGPUEngine* getEngine(DeviceRef device)
   {
     if (!device)
       return nullptr;
-    return static_cast<WebGPUEngine*>(device->getEngine());
+    Device* impl = reinterpret_cast<Device*>(device.getHandle());
+    return static_cast<WebGPUEngine*>(impl->getEngine());
   }
 
 OIDN_NAMESPACE_END

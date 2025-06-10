@@ -8,20 +8,22 @@ OIDN_NAMESPACE_BEGIN
 
   static void handle_request_adapter(WGPURequestAdapterStatus status,
                                      WGPUAdapter adapter,
-                                     const char* message,
-                                     void* userdata)
+                                     WGPUStringView,
+                                     void* userdata1,
+                                     void*)
   {
-    auto* out = static_cast<WGPUAdapter*>(userdata);
+    auto* out = static_cast<WGPUAdapter*>(userdata1);
     if (status == WGPURequestAdapterStatus_Success)
       *out = adapter;
   }
 
   static void handle_request_device(WGPURequestDeviceStatus status,
                                     WGPUDevice device,
-                                    const char* message,
-                                    void* userdata)
+                                    WGPUStringView,
+                                    void* userdata1,
+                                    void*)
   {
-    auto* out = static_cast<WGPUDevice*>(userdata);
+    auto* out = static_cast<WGPUDevice*>(userdata1);
     if (status == WGPURequestDeviceStatus_Success)
       *out = device;
   }
@@ -43,14 +45,19 @@ OIDN_NAMESPACE_BEGIN
       throw std::runtime_error("failed to create WebGPU instance");
 
     WGPURequestAdapterOptions opts{};
-    bool done = false;
-    wgpuInstanceRequestAdapter(instance, &opts,
-        (WGPURequestAdapterCallbackInfo){handle_request_adapter, &adapter, nullptr});
+    WGPURequestAdapterCallbackInfo adapterCb{};
+    adapterCb.mode = WGPUCallbackMode_AllowProcessEvents;
+    adapterCb.callback = handle_request_adapter;
+    adapterCb.userdata1 = &adapter;
+    wgpuInstanceRequestAdapter(instance, &opts, adapterCb);
     while (!adapter)
       wgpuInstanceProcessEvents(instance);
 
-    wgpuAdapterRequestDevice(adapter, nullptr,
-        (WGPURequestDeviceCallbackInfo){handle_request_device, &device, nullptr});
+    WGPURequestDeviceCallbackInfo deviceCb{};
+    deviceCb.mode = WGPUCallbackMode_AllowProcessEvents;
+    deviceCb.callback = handle_request_device;
+    deviceCb.userdata1 = &device;
+    wgpuAdapterRequestDevice(adapter, nullptr, deviceCb);
     while (!device)
       wgpuInstanceProcessEvents(instance);
 

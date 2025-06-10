@@ -16,7 +16,8 @@ End Goal: add the new backend based on the WebGPU API.
 ## Configure: enable WebGPU backend (OFF by default)
 cmake -B build -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
-      -DOIDN_DEVICE_WEBGPU=ON .
+      -DOIDN_DEVICE_WEBGPU=ON \
+      -DOIDN_FILTER_RT=OFF -DOIDN_FILTER_RTLIGHTMAP=OFF .
 
 ## Build everything
 cmake --build build -j$(nproc)
