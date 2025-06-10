@@ -56,9 +56,12 @@ New device type OIDN_DEVICE_TYPE_WEBGPU should be selectable via public C API.
 
 Source tree:
 
-devices/webgpu/
+  devices/webgpu/
   ├─ webgpu_device.h / .cpp      # owns WGPUInstance/Device/Queue
   ├─ webgpu_engine.h / .cpp      # records compute passes
+  ├─ webgpu_conv.h / .cpp        # Conv op wrapper
+  ├─ webgpu_pool.h / .cpp        # Pool op wrapper
+  ├─ webgpu_upsample.h / .cpp    # Upsample op wrapper
   ├─ webgpu_tensor.h             # POD for tensor views
   └─ CMakeLists.txt              # adds option OIDN_DEVICE_WEBGPU
 
@@ -72,7 +75,7 @@ Work-group size hard-coded to 8×8×1.
 Host ↔ GPU transfers use the public buffer API (`oidnNewBuffer`, `oidnWriteBuffer`,
 `oidnReadBuffer`).
 Currently three kernels are hooked up: `conv2d_eltwise`, `pool2x2`, and `upsample2x`.
-All are tested against the CPU backend for bitwise correctness.
+Op classes WebGPUConv/WebGPUPool/WebGPUUpsample expose these through the standard Engine API and are validated against the CPU backend.
 
 ## Verification Procedure
 Build with -DOIDN_DEVICE_WEBGPU=ON.

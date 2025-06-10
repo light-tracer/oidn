@@ -92,11 +92,18 @@ TEST(WebGPU, Pool2x2)
   srcBuf.write(0, sizeof(src), src);
   auto outBuf = dev.newBuffer(sizeof(out));
 
-  auto A = eng->newTensor(srcBuf, WebGPUTensorType::INPUT, N,C,H,W);
-  auto O = eng->newTensor(outBuf, WebGPUTensorType::OUTPUT, C,1,OH,OW);
+  TensorDesc srcDescGPU({int(C),int(H),int(W)}, TensorLayout::chw, DataType::Float32);
+  auto srcTensorGPU = eng->Engine::newTensor(Ref<Buffer>(reinterpret_cast<Buffer*>(srcBuf.getHandle())), srcDescGPU);
 
-  eng->pool2x2(A,O);
-  eng->sync();
+  auto pool = eng->newPool({srcDescGPU});
+  pool->setSrc(srcTensorGPU);
+  auto dstDescGPU = pool->getDstDesc();
+  ASSERT_EQ(dstDescGPU.getH(), int(OH));
+  ASSERT_EQ(dstDescGPU.getW(), int(OW));
+  auto dstTensorGPU = eng->Engine::newTensor(Ref<Buffer>(reinterpret_cast<Buffer*>(outBuf.getHandle())), dstDescGPU);
+  pool->setDst(dstTensorGPU);
+  pool->submit(nullptr);
+  dev.sync();
   outBuf.read(0, sizeof(out), out);
 
   for(size_t i=0;i<C*OH*OW;++i)

@@ -1,6 +1,9 @@
 #include "webgpu_engine.h"
 #include "webgpu_device.h"
 #include "webgpu_buffer.h"
+#include "webgpu_conv.h"
+#include "webgpu_pool.h"
+#include "webgpu_upsample.h"
 #include <cmath>
 #include <cstring>
 
@@ -131,19 +134,19 @@ OIDN_NAMESPACE_BEGIN
       "creating shared buffers is not supported by the WebGPU backend");
   }
 
-  Ref<Conv> WebGPUEngine::newConv(const ConvDesc&)
+  Ref<Conv> WebGPUEngine::newConv(const ConvDesc& desc)
   {
-    throw std::logic_error("operation is not implemented");
+    return makeRef<WebGPUConv>(this, desc);
   }
 
-  Ref<Pool> WebGPUEngine::newPool(const PoolDesc&)
+  Ref<Pool> WebGPUEngine::newPool(const PoolDesc& desc)
   {
-    throw std::logic_error("operation is not implemented");
+    return makeRef<WebGPUPool>(this, desc);
   }
 
-  Ref<Upsample> WebGPUEngine::newUpsample(const UpsampleDesc&)
+  Ref<Upsample> WebGPUEngine::newUpsample(const UpsampleDesc& desc)
   {
-    throw std::logic_error("operation is not implemented");
+    return makeRef<WebGPUUpsample>(this, desc);
   }
 
   Ref<Autoexposure> WebGPUEngine::newAutoexposure(const ImageDesc&)

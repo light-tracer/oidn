@@ -2,6 +2,9 @@ find_package(GTest REQUIRED)
 add_executable(webgpu_conv_test test_webgpu_conv.cpp
   ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_helper.cpp
   ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_engine.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_conv.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_pool.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_upsample.cpp
   ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_buffer.cpp
   ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_device.cpp)
 target_include_directories(webgpu_conv_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/webgpu)
@@ -13,6 +16,9 @@ add_test(NAME WebGPU.Conv2d COMMAND webgpu_conv_test)
 add_executable(webgpu_upsample_test test_webgpu_upsample.cpp
   ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_helper.cpp
   ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_engine.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_conv.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_pool.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_upsample.cpp
   ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_buffer.cpp
   ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_device.cpp)
 target_include_directories(webgpu_upsample_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/webgpu)
@@ -24,6 +30,9 @@ add_test(NAME WebGPU.Upsample COMMAND webgpu_upsample_test)
 add_executable(webgpu_pool_test test_webgpu_pool.cpp
   ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_helper.cpp
   ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_engine.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_conv.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_pool.cpp
+  ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_upsample.cpp
   ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_buffer.cpp
   ${PROJECT_SOURCE_DIR}/devices/webgpu/webgpu_device.cpp)
 target_include_directories(webgpu_pool_test PRIVATE ${PROJECT_SOURCE_DIR}/devices/webgpu)
