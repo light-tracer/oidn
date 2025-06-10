@@ -175,3 +175,7 @@ endif()
 if(OIDN_DEVICE_METAL)
   add_subdirectory(metal)
 endif()
+
+if(OIDN_DEVICE_WEBGPU)
+  add_subdirectory(webgpu)
+endif()

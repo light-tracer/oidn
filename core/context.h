@@ -87,7 +87,7 @@ OIDN_NAMESPACE_BEGIN
     #endif
     #if defined(OIDN_DEVICE_WEBGPU)
       if (initDeviceType(deviceType, DeviceType::WGPU, "OIDN_DEVICE_WEBGPU"))
-        OIDN_INIT_MODULE(device_webgpu);
+        OIDN_INIT_STATIC_MODULE(device_webgpu);
     #endif
 
       if (deviceType == DeviceType::Default)

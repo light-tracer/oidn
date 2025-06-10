@@ -12,7 +12,7 @@ OIDN_NAMESPACE_BEGIN
     }
   };
 
-  OIDN_DECLARE_INIT_MODULE(device_webgpu)
+  OIDN_DECLARE_INIT_STATIC_MODULE(device_webgpu)
   {
     Context::registerDeviceType<WebGPUDeviceFactory>(DeviceType::WGPU,
                                                      {makeRef<PhysicalDevice>(DeviceType::WGPU,0)});
