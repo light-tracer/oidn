@@ -80,9 +80,10 @@ Run: ctest --output-on-failure -R WebGPU
 
 The tests internally:
 
-prepare deterministic random tensors,
-run the same operation on CPU and WebGPU,
-and declare success if
+prepares deterministic random tensors,
+executes the convolution using the CPU backend to get the reference output,
+runs the same layer on the WebGPU backend,
+declares success if
 max( |ref - gpu| / max(|ref|, 1e-6) ) < 1e-4.
 
 ## Next Steps / Perspective
