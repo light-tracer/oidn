@@ -112,15 +112,21 @@ TEST(WebGPU, Conv2d)
       }
   }
 
-  auto srcBuf = dev.newBuffer(sizeof(src));
-  srcBuf.write(0, sizeof(src), src);
+  float srcGPU[N*C*H*W];
+  for(uint32_t h=0; h<H; ++h)
+    for(uint32_t w=0; w<W; ++w)
+      for(uint32_t c=0; c<C; ++c)
+        srcGPU[(h*W + w)*C + c] = src[(size_t)c*H*W + h*W + w];
+
+  auto srcBuf = dev.newBuffer(sizeof(srcGPU));
+  srcBuf.write(0, sizeof(srcGPU), srcGPU);
   auto wBuf = dev.newBuffer(sizeof(weight));
   wBuf.write(0, sizeof(weight), weight);
   auto bBuf = dev.newBuffer(sizeof(bias));
   bBuf.write(0, sizeof(bias), bias);
   auto outBuf = dev.newBuffer(sizeof(out));
 
-  TensorDesc srcDescGPU({int(C),int(H),int(W)}, TensorLayout::chw, DataType::Float32);
+  TensorDesc srcDescGPU({int(C),int(H),int(W)}, TensorLayout::hwc, DataType::Float32);
   TensorDesc wDescGPU({int(OC),int(IC),int(KH),int(KW)}, TensorLayout::oihw, DataType::Float32);
   TensorDesc bDescGPU({int(OC)}, TensorLayout::x, DataType::Float32);
 
@@ -140,7 +146,12 @@ TEST(WebGPU, Conv2d)
   conv->submit(nullptr);
   dev.sync();
 
-  outBuf.read(0, sizeof(out), out);
+  float outGPU[OC*OH*OW];
+  outBuf.read(0, sizeof(outGPU), outGPU);
+  for(uint32_t h=0; h<OH; ++h)
+    for(uint32_t w=0; w<OW; ++w)
+      for(uint32_t c=0; c<OC; ++c)
+        out[(size_t)c*OH*OW + h*OW + w] = outGPU[(h*OW + w)*OC + c];
 
   for(size_t i=0;i<OC*OH*OW;++i)
     ASSERT_NEAR(out[i], ref[i], 1e-4f);

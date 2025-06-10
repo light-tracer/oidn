@@ -77,6 +77,10 @@ Host ↔ GPU transfers use the public buffer API (`oidnNewBuffer`, `oidnWriteBuf
 Currently three kernels are hooked up: `conv2d_eltwise`, `pool2x2`, and `upsample2x`.
 Op classes WebGPUConv/WebGPUPool/WebGPUUpsample expose these through the standard Engine API and are validated against the CPU backend.
 
+The Metal backend serves as the reference implementation.  It uses NHWC tensor
+layout with OIHW weights.  The WebGPU backend now adopts the same layouts and
+the tests still compare its results against the CPU backend for convenience.
+
 ## Verification Procedure
 Build with -DOIDN_DEVICE_WEBGPU=ON.
 

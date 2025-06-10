@@ -88,11 +88,17 @@ TEST(WebGPU, Pool2x2)
       }
   }
 
-  auto srcBuf = dev.newBuffer(sizeof(src));
-  srcBuf.write(0, sizeof(src), src);
+  float srcGPU[N*C*H*W];
+  for(uint32_t h=0; h<H; ++h)
+    for(uint32_t w=0; w<W; ++w)
+      for(uint32_t c=0; c<C; ++c)
+        srcGPU[(h*W + w)*C + c] = src[(size_t)c*H*W + h*W + w];
+
+  auto srcBuf = dev.newBuffer(sizeof(srcGPU));
+  srcBuf.write(0, sizeof(srcGPU), srcGPU);
   auto outBuf = dev.newBuffer(sizeof(out));
 
-  TensorDesc srcDescGPU({int(C),int(H),int(W)}, TensorLayout::chw, DataType::Float32);
+  TensorDesc srcDescGPU({int(C),int(H),int(W)}, TensorLayout::hwc, DataType::Float32);
   auto srcTensorGPU = eng->Engine::newTensor(Ref<Buffer>(reinterpret_cast<Buffer*>(srcBuf.getHandle())), srcDescGPU);
 
   auto pool = eng->newPool({srcDescGPU});
@@ -104,7 +110,12 @@ TEST(WebGPU, Pool2x2)
   pool->setDst(dstTensorGPU);
   pool->submit(nullptr);
   dev.sync();
-  outBuf.read(0, sizeof(out), out);
+  float outGPU[C*OH*OW];
+  outBuf.read(0, sizeof(outGPU), outGPU);
+  for(uint32_t h=0; h<OH; ++h)
+    for(uint32_t w=0; w<OW; ++w)
+      for(uint32_t c=0; c<C; ++c)
+        out[(size_t)c*OH*OW + h*OW + w] = outGPU[(h*OW + w)*C + c];
 
   for(size_t i=0;i<C*OH*OW;++i)
     ASSERT_NEAR(out[i], ref[i], 1e-6f);

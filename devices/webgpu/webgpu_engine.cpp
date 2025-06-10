@@ -35,7 +35,7 @@ OIDN_NAMESPACE_BEGIN
         for (var kx: u32 = 0u; kx < size.kw; kx = kx + 1u) {
           let ix = ox + kx;
           let iy = oy + ky;
-          let srcIdx = (((0u * size.ic + ic) * size.ih + iy) * size.iw + ix);
+          let srcIdx = (((0u * size.ih + iy) * size.iw + ix) * size.ic + ic);
           let wIdx   = (((oc * size.ic + ic) * size.kh + ky) * size.kw + kx);
           acc = acc + src.data[srcIdx] * weight.data[wIdx];
         }
@@ -43,7 +43,7 @@ OIDN_NAMESPACE_BEGIN
     }
     acc = acc + bias.data[oc];
     if (acc < 0.0) { acc = 0.0; }
-    let dstIdx = (((0u * size.oc + oc) * size.oh + oy) * size.ow + ox);
+    let dstIdx = (((0u * size.oh + oy) * size.ow + ox) * size.oc + oc);
     dst.data[dstIdx] = acc;
   }
   )wgsl";
@@ -64,15 +64,16 @@ OIDN_NAMESPACE_BEGIN
     if (ox >= size.ow || oy >= size.oh || c >= size.c) { return; }
     let ix = ox * 2u;
     let iy = oy * 2u;
-    let srcIdx0 = (((0u * size.c + c) * size.h + iy) * size.w + ix);
-    let srcIdx1 = srcIdx0 + 1u;
-    let srcIdx2 = srcIdx0 + size.w;
-    let srcIdx3 = srcIdx2 + 1u;
+    let base = (((0u * size.h + iy) * size.w + ix) * size.c + c);
+    let srcIdx0 = base;
+    let srcIdx1 = base + size.c;
+    let srcIdx2 = base + size.c * size.w;
+    let srcIdx3 = srcIdx2 + size.c;
     var m = src.data[srcIdx0];
     if (src.data[srcIdx1] > m) { m = src.data[srcIdx1]; }
     if (src.data[srcIdx2] > m) { m = src.data[srcIdx2]; }
     if (src.data[srcIdx3] > m) { m = src.data[srcIdx3]; }
-    let dstIdx = (((0u * size.c + c) * size.oh + oy) * size.ow + ox);
+    let dstIdx = (((0u * size.oh + oy) * size.ow + ox) * size.c + c);
     dst.data[dstIdx] = m;
   }
   )wgsl";
@@ -93,8 +94,8 @@ OIDN_NAMESPACE_BEGIN
     if (ox >= size.w*2u || oy >= size.h*2u || c >= size.c) { return; }
     let ix = ox / 2u;
     let iy = oy / 2u;
-    let srcIdx = (((0u * size.c + c) * size.h + iy) * size.w + ix);
-    let dstIdx = (((0u * size.c + c) * (size.h*2u) + oy) * (size.w*2u) + ox);
+    let srcIdx = (((0u * size.h + iy) * size.w + ix) * size.c + c);
+    let dstIdx = (((0u * (size.h*2u) + oy) * (size.w*2u) + ox) * size.c + c);
     dst.data[dstIdx] = src.data[srcIdx];
   }
   )wgsl";
