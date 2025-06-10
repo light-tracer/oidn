@@ -120,13 +120,25 @@ TEST(WebGPU, Conv2d)
   bBuf.write(0, sizeof(bias), bias);
   auto outBuf = dev.newBuffer(sizeof(out));
 
-  auto A = eng->newTensor(srcBuf, WebGPUTensorType::INPUT, N,C,H,W);
-  auto Wt= eng->newTensor(wBuf, WebGPUTensorType::CONST, OC,IC,KH,KW);
-  auto B = eng->newTensor(bBuf, WebGPUTensorType::CONST, OC,1,1,1);
-  auto O = eng->newTensor(outBuf, WebGPUTensorType::OUTPUT, OC,1,OH,OW);
+  TensorDesc srcDescGPU({int(C),int(H),int(W)}, TensorLayout::chw, DataType::Float32);
+  TensorDesc wDescGPU({int(OC),int(IC),int(KH),int(KW)}, TensorLayout::oihw, DataType::Float32);
+  TensorDesc bDescGPU({int(OC)}, TensorLayout::x, DataType::Float32);
 
-  eng->conv2d_eltwise(A,Wt,B,O);
-  eng->sync();
+  auto srcTensorGPU = eng->Engine::newTensor(Ref<Buffer>(reinterpret_cast<Buffer*>(srcBuf.getHandle())), srcDescGPU);
+  auto wTensorGPU   = eng->Engine::newTensor(Ref<Buffer>(reinterpret_cast<Buffer*>(wBuf.getHandle())), wDescGPU);
+  auto bTensorGPU   = eng->Engine::newTensor(Ref<Buffer>(reinterpret_cast<Buffer*>(bBuf.getHandle())), bDescGPU);
+
+  auto conv = eng->newConv({srcDescGPU, wDescGPU, bDescGPU, Activation::ReLU, PostOp::None, false});
+  conv->setSrc(srcTensorGPU);
+  conv->setWeight(wTensorGPU);
+  conv->setBias(bTensorGPU);
+  auto dstDescGPU = conv->getDstDesc();
+  ASSERT_EQ(dstDescGPU.getH(), int(OH));
+  ASSERT_EQ(dstDescGPU.getW(), int(OW));
+  auto dstTensorGPU = eng->Engine::newTensor(Ref<Buffer>(reinterpret_cast<Buffer*>(outBuf.getHandle())), dstDescGPU);
+  conv->setDst(dstTensorGPU);
+  conv->submit(nullptr);
+  dev.sync();
 
   outBuf.read(0, sizeof(out), out);
 
