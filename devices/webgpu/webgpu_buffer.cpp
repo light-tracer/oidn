@@ -1,14 +1,35 @@
 #include "webgpu_buffer.h"
 #include "webgpu_device.h"
 #include "webgpu_engine.h"
+#include "webgpu_heap.h"
 #include <cstring>
 
 OIDN_NAMESPACE_BEGIN
 
   WebGPUBuffer::WebGPUBuffer(WebGPUEngine* engine, size_t byteSize)
-    : engine(engine), buffer(nullptr), byteSize(byteSize)
+    : engine(engine), buffer(nullptr), byteSize(byteSize), shared(false)
   {
     init();
+  }
+
+  WebGPUBuffer::WebGPUBuffer(const Ref<Arena>& arena, size_t byteSize, size_t byteOffset)
+    : Buffer(arena, byteOffset),
+      engine(dynamic_cast<WebGPUEngine*>(arena->getEngine())),
+      buffer(nullptr),
+      byteSize(byteSize),
+      shared(true)
+  {
+    if (!engine)
+      throw Exception(Error::InvalidArgument, "buffer is incompatible with arena");
+
+    const auto byteSizeAndAlignment = engine->getBufferByteSizeAndAlignment(byteSize, Storage::Device);
+    if (byteOffset % byteSizeAndAlignment.alignment != 0)
+      throw Exception(Error::InvalidArgument, "buffer offset is unaligned");
+    if (byteOffset + byteSizeAndAlignment.size > arena->getByteSize())
+      throw Exception(Error::InvalidArgument, "arena region is out of bounds");
+
+    WebGPUHeap* heap = static_cast<WebGPUHeap*>(arena->getHeap());
+    buffer = heap->getWGPUBuffer();
   }
 
   WebGPUBuffer::~WebGPUBuffer()
@@ -33,7 +54,7 @@ OIDN_NAMESPACE_BEGIN
 
   void WebGPUBuffer::free()
   {
-    if (buffer)
+    if (!shared && buffer)
       wgpuBufferRelease(buffer);
     buffer = nullptr;
   }
@@ -50,7 +71,7 @@ OIDN_NAMESPACE_BEGIN
                                  WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
 
     WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(dev->device, nullptr);
-    wgpuCommandEncoderCopyBufferToBuffer(enc, buffer, byteOffset, readback, 0, byteSize);
+    wgpuCommandEncoderCopyBufferToBuffer(enc, buffer, this->byteOffset + byteOffset, readback, 0, byteSize);
     WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(enc, nullptr);
     dev->submit(cmd);
     wgpuCommandBufferRelease(cmd);
@@ -86,12 +107,23 @@ OIDN_NAMESPACE_BEGIN
                                 WGPUBufferUsage_MapWrite | WGPUBufferUsage_CopySrc, srcHostPtr);
 
     WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(dev->device, nullptr);
-    wgpuCommandEncoderCopyBufferToBuffer(enc, staging, 0, buffer, byteOffset, byteSize);
+    wgpuCommandEncoderCopyBufferToBuffer(enc, staging, 0, buffer, this->byteOffset + byteOffset, byteSize);
     WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(enc, nullptr);
     dev->submit(cmd);
     wgpuCommandBufferRelease(cmd);
     wgpuCommandEncoderRelease(enc);
     wgpuBufferRelease(staging);
+  }
+
+  void WebGPUBuffer::postRealloc()
+  {
+    if (arena)
+    {
+      WebGPUHeap* heap = static_cast<WebGPUHeap*>(arena->getHeap());
+      buffer = heap->getWGPUBuffer();
+    }
+
+    Buffer::postRealloc();
   }
 
 OIDN_NAMESPACE_END

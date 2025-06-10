@@ -21,9 +21,11 @@ OIDN_NAMESPACE_BEGIN
 
     Device* getDevice() const override;
 
-    // Buffer
+    // Heap / Buffer
+    Ref<Heap>   newHeap(size_t byteSize, Storage storage) override;
     Ref<Buffer> newBuffer(size_t byteSize, Storage storage) override;
     Ref<Buffer> newBuffer(void* ptr, size_t byteSize) override;
+    Ref<Buffer> newBuffer(const Ref<Arena>& arena, size_t byteSize, size_t byteOffset) override;
 
     Ref<Conv> newConv(const ConvDesc& desc) override;
     Ref<Pool> newPool(const PoolDesc& desc) override;

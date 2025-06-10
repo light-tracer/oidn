@@ -3,6 +3,7 @@
 #include "../devices/webgpu/webgpu_engine.h"
 #include "../core/tensor.h"
 #include "../common/platform.h"
+#include "../devices/webgpu/webgpu_arena.h"
 #include <gtest/gtest.h>
 
 using namespace oidn;
@@ -31,11 +32,23 @@ TEST(WebGPU, EltwiseAdd)
   for(size_t i=0;i<COUNT;++i)
     ref[i] = a[i] + b[i];
 
-  auto bufA = dev.newBuffer(sizeof(a));
+  const size_t sizeA = sizeof(a);
+  const size_t sizeB = sizeof(b);
+  const size_t sizeOut = sizeof(ref);
+  size_t offA = 0;
+  size_t offB = round_up(offA + sizeA, memoryAlignment);
+  size_t offOut = round_up(offB + sizeB, memoryAlignment);
+  size_t arenaSize = offOut + sizeOut;
+
+  auto arena = makeRef<WebGPUArena>(eng, arenaSize);
+  Ref<Buffer> bufAInt = eng->Engine::newBuffer(arena, sizeA, offA);
+  Ref<Buffer> bufBInt = eng->Engine::newBuffer(arena, sizeB, offB);
+  Ref<Buffer> bufOutInt = eng->Engine::newBuffer(arena, sizeOut, offOut);
+  BufferRef bufA(reinterpret_cast<OIDNBuffer>(bufAInt.detach()));
+  BufferRef bufB(reinterpret_cast<OIDNBuffer>(bufBInt.detach()));
+  BufferRef bufOut(reinterpret_cast<OIDNBuffer>(bufOutInt.detach()));
   bufA.write(0,sizeof(a),a);
-  auto bufB = dev.newBuffer(sizeof(b));
   bufB.write(0,sizeof(b),b);
-  auto bufOut = dev.newBuffer(sizeof(ref));
 
   auto tA = eng->newTensor(BufferRef(bufA.getHandle()), WebGPUTensorType::INPUT, 1,1,1,W);
   auto tB = eng->newTensor(BufferRef(bufB.getHandle()), WebGPUTensorType::INPUT, 1,1,1,W);

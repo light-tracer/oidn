@@ -1,6 +1,7 @@
 #include "webgpu_engine.h"
 #include "webgpu_device.h"
 #include "webgpu_buffer.h"
+#include "webgpu_heap.h"
 #include "webgpu_conv.h"
 #include "webgpu_pool.h"
 #include "webgpu_upsample.h"
@@ -140,9 +141,19 @@ OIDN_NAMESPACE_BEGIN
     return device;
   }
 
+  Ref<Heap> WebGPUEngine::newHeap(size_t byteSize, Storage storage)
+  {
+    return makeRef<WebGPUHeap>(this, byteSize, storage);
+  }
+
   Ref<Buffer> WebGPUEngine::newBuffer(size_t byteSize, Storage)
   {
     return makeRef<WebGPUBuffer>(this, byteSize);
+  }
+
+  Ref<Buffer> WebGPUEngine::newBuffer(const Ref<Arena>& arena, size_t byteSize, size_t byteOffset)
+  {
+    return makeRef<WebGPUBuffer>(arena, byteSize, byteOffset);
   }
 
   Ref<Buffer> WebGPUEngine::newBuffer(void*, size_t)
