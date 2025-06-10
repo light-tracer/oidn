@@ -1,13 +1,14 @@
 find_package(GTest REQUIRED)
 
 function(add_webgpu_test exe test_name source)
-  add_executable(${exe} ${source})
+  add_executable(${exe} ${source} test_main.cpp)
   target_include_directories(${exe} PRIVATE ${PROJECT_SOURCE_DIR}/devices/webgpu)
   target_include_directories(${exe} PRIVATE ${PROJECT_SOURCE_DIR}/devices/cpu)
   target_include_directories(${exe} PRIVATE ${PROJECT_SOURCE_DIR})
   target_include_directories(${exe} PRIVATE ${OIDN_WGPU_DIR}/include)
-  target_link_libraries(${exe} PRIVATE OpenImageDenoise OpenImageDenoise_core OpenImageDenoise_device_cpu OpenImageDenoise_device_webgpu GTest::GTest GTest::Main)
+  target_link_libraries(${exe} PRIVATE OpenImageDenoise OpenImageDenoise_core OpenImageDenoise_device_cpu OpenImageDenoise_device_webgpu GTest::GTest)
   add_test(NAME ${test_name} COMMAND ${exe})
+  set_property(TEST ${test_name} PROPERTY SKIP_RETURN_CODE 77)
 endfunction()
 
 add_webgpu_test(webgpu_conv_test WebGPU.Conv2d test_webgpu_conv.cpp)

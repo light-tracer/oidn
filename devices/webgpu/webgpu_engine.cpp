@@ -15,7 +15,7 @@
 OIDN_NAMESPACE_BEGIN
 
   static const char* kConv2dWGSL = R"wgsl(
-  struct Tensor { data: array<f32>; };
+  struct Tensor { data: array<f32>, };
 
   @group(0) @binding(0) var<storage, read>  src   : Tensor;
   @group(0) @binding(1) var<storage, read>  weight: Tensor;
@@ -24,7 +24,7 @@ OIDN_NAMESPACE_BEGIN
 
   struct Size { n: u32, ic: u32, ih: u32, iw: u32,
                 oc: u32, oh: u32, ow: u32,
-                kh: u32, kw: u32 };
+                kh: u32, kw: u32, };
   @group(0) @binding(4) var<uniform> size: Size;
 
   @compute @workgroup_size(8, 8, 1)
@@ -54,11 +54,11 @@ OIDN_NAMESPACE_BEGIN
   )wgsl";
 
   static const char* kPoolWGSL = R"wgsl(
-  struct Tensor { data: array<f32>; };
+  struct Tensor { data: array<f32>, };
 
   @group(0) @binding(0) var<storage, read>  src : Tensor;
   @group(0) @binding(1) var<storage, read_write> dst : Tensor;
-  struct Size { n: u32, c: u32, h: u32, w: u32, oh: u32, ow: u32; };
+  struct Size { n: u32, c: u32, h: u32, w: u32, oh: u32, ow: u32, };
   @group(0) @binding(2) var<uniform> size: Size;
 
   @compute @workgroup_size(8, 8, 1)
@@ -84,11 +84,11 @@ OIDN_NAMESPACE_BEGIN
   )wgsl";
 
   static const char* kUpsampleWGSL = R"wgsl(
-  struct Tensor { data: array<f32>; };
+  struct Tensor { data: array<f32>, };
 
   @group(0) @binding(0) var<storage, read>  src : Tensor;
   @group(0) @binding(1) var<storage, read_write> dst : Tensor;
-  struct Size { n: u32, c: u32, h: u32, w: u32; };
+  struct Size { n: u32, c: u32, h: u32, w: u32, };
   @group(0) @binding(2) var<uniform> size: Size;
 
   @compute @workgroup_size(8, 8, 1)
@@ -356,7 +356,7 @@ OIDN_NAMESPACE_BEGIN
       return;
 
     static const char* kWGSL = R"wgsl(
-    struct Tensor { data: array<f32>; };
+    struct Tensor { data: array<f32>, };
     @group(0) @binding(0) var<storage, read>  A: Tensor;
     @group(0) @binding(1) var<storage, read>  B: Tensor;
     @group(0) @binding(2) var<storage, read_write> C: Tensor;
@@ -414,7 +414,7 @@ OIDN_NAMESPACE_BEGIN
       return;
 
     static const char* kWGSL = R"wgsl(
-    struct Tensor { data: array<f32>; };
+    struct Tensor { data: array<f32>, };
     @group(0) @binding(0) var<storage, read>  A: Tensor;
     @group(0) @binding(1) var<storage, read>  B: Tensor;
     @group(0) @binding(2) var<storage, read_write> C: Tensor;
@@ -472,7 +472,7 @@ OIDN_NAMESPACE_BEGIN
       return;
 
     static const char* kWGSL = R"wgsl(
-    struct Tensor { data: array<f32>; };
+    struct Tensor { data: array<f32>, };
     @group(0) @binding(0) var<storage, read>  A: Tensor;
     @group(0) @binding(1) var<storage, read_write> B: Tensor;
     @group(0) @binding(2) var<uniform> size: u32;
