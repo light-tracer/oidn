@@ -74,8 +74,8 @@ Fixed stride = 1, no padding, arbitrary N,C,H,W.
 Work-group size hard-coded to 8×8×1.
 Host ↔ GPU transfers use the public buffer API (`oidnNewBuffer`, `oidnWriteBuffer`,
 `oidnReadBuffer`).
-Currently kernels for `conv2d_eltwise`, `pool2x2`, and `upsample2x` are implemented in WGSL shaders.
-Additional host-side implementations provide `input_process`, `output_process`, `image_copy`, and `autoexposure` so the basic filter pipeline runs end-to-end.
+Currently kernels for `conv2d_eltwise`, `pool2x2`, `upsample2x`, `input_process`, `output_process`, `image_copy`, and `autoexposure` are implemented in WGSL shaders.
+Earlier revisions executed the last four operations on the CPU, but they now run on the GPU as well.
 Op classes map these kernels through the standard Engine API and are validated against the CPU backend.
 
 The Metal backend serves as the reference implementation.  It uses NHWC tensor
