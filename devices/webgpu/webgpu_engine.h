@@ -16,6 +16,18 @@ OIDN_NAMESPACE_BEGIN
 
     Device* getDevice() const override;
 
+    // Engine interface overrides - currently unsupported operations
+    Ref<Conv> newConv(const ConvDesc& desc) override;
+    Ref<Pool> newPool(const PoolDesc& desc) override;
+    Ref<Upsample> newUpsample(const UpsampleDesc& desc) override;
+    Ref<Autoexposure> newAutoexposure(const ImageDesc& srcDesc) override;
+    Ref<InputProcess> newInputProcess(const InputProcessDesc& desc) override;
+    Ref<OutputProcess> newOutputProcess(const OutputProcessDesc& desc) override;
+    Ref<ImageCopy> newImageCopy() override;
+    void submitHostFunc(std::function<void()>&& f,
+                        const Ref<CancellationToken>& ct = nullptr) override;
+    void wait() override;
+
     WebGPUTensor newTensor(const float* data, WebGPUTensorType type,
                            uint32_t n, uint32_t c, uint32_t h, uint32_t w);
 

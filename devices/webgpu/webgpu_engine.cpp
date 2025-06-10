@@ -60,18 +60,67 @@ OIDN_NAMESPACE_BEGIN
     return device;
   }
 
+  Ref<Conv> WebGPUEngine::newConv(const ConvDesc&)
+  {
+    throw std::logic_error("operation is not implemented");
+  }
+
+  Ref<Pool> WebGPUEngine::newPool(const PoolDesc&)
+  {
+    throw std::logic_error("operation is not implemented");
+  }
+
+  Ref<Upsample> WebGPUEngine::newUpsample(const UpsampleDesc&)
+  {
+    throw std::logic_error("operation is not implemented");
+  }
+
+  Ref<Autoexposure> WebGPUEngine::newAutoexposure(const ImageDesc&)
+  {
+    throw std::logic_error("operation is not implemented");
+  }
+
+  Ref<InputProcess> WebGPUEngine::newInputProcess(const InputProcessDesc&)
+  {
+    throw std::logic_error("operation is not implemented");
+  }
+
+  Ref<OutputProcess> WebGPUEngine::newOutputProcess(const OutputProcessDesc&)
+  {
+    throw std::logic_error("operation is not implemented");
+  }
+
+  Ref<ImageCopy> WebGPUEngine::newImageCopy()
+  {
+    throw std::logic_error("operation is not implemented");
+  }
+
+  void WebGPUEngine::submitHostFunc(std::function<void()>&& f,
+                                    const Ref<CancellationToken>&)
+  {
+    f();
+  }
+
+  void WebGPUEngine::wait()
+  {
+    device->sync();
+  }
+
   void WebGPUEngine::initPipeline()
   {
     if (pipeline)
       return;
 
-    shaderModule = wgpuDeviceCreateShaderModule(device->device,
-      &(WGPUShaderModuleDescriptor){
-        .nextInChain = (const WGPUChainedStruct*)&(const WGPUShaderSourceWGSL){
-          .chain = { WGPUSType_ShaderSourceWGSL },
-          .code  = { kConv2dWGSL, strlen(kConv2dWGSL) }
-        }
-      });
+    WGPUShaderSourceWGSL source{};
+    source.chain.next = nullptr;
+    source.chain.sType = WGPUSType_ShaderSourceWGSL;
+    source.code = { kConv2dWGSL, strlen(kConv2dWGSL) };
+
+    WGPUShaderModuleDescriptor smDesc{};
+    smDesc.nextInChain = reinterpret_cast<const WGPUChainedStruct*>(&source);
+    smDesc.label = { nullptr, 0 };
+
+    shaderModule = wgpuDeviceCreateShaderModule(device->device, &smDesc);
 
     WGPUBindGroupLayoutEntry entries[5] = {};
     entries[0].binding = 0; entries[0].visibility = WGPUShaderStage_Compute;
@@ -98,7 +147,12 @@ OIDN_NAMESPACE_BEGIN
     WGPUComputePipelineDescriptor cpDesc{};
     cpDesc.layout = pipelineLayout;
     cpDesc.compute.module = shaderModule;
-    cpDesc.compute.entryPoint = "main";
+    WGPUStringView mainEntry{ "main", WGPU_STRLEN };
+    cpDesc.compute.entryPoint = mainEntry;
+    cpDesc.compute.nextInChain = nullptr;
+    cpDesc.compute.constantCount = 0;
+    cpDesc.compute.constants = nullptr;
+    cpDesc.label = { nullptr, 0 };
     pipeline = wgpuDeviceCreateComputePipeline(device->device, &cpDesc);
   }
 
@@ -183,10 +237,16 @@ OIDN_NAMESPACE_BEGIN
     for (auto& rb : readbacks)
     {
       bool done = false;
-      auto callback = [](WGPUBufferMapAsyncStatus status, void* userdata){
-        bool* d = static_cast<bool*>(userdata); *d = (status == WGPUBufferMapAsyncStatus_Success); };
-      wgpuBufferMapAsync(rb.readback, WGPUMapMode_Read, 0, rb.size,
-                         (WGPUBufferMapCallbackInfo){callback, &done});
+      auto callback = [](WGPUMapAsyncStatus status, WGPUStringView, void* userdata1, void*)
+      {
+        bool* d = static_cast<bool*>(userdata1);
+        *d = (status == WGPUMapAsyncStatus_Success);
+      };
+      WGPUBufferMapCallbackInfo cbInfo{};
+      cbInfo.mode = WGPUCallbackMode_AllowProcessEvents;
+      cbInfo.callback = callback;
+      cbInfo.userdata1 = &done;
+      wgpuBufferMapAsync(rb.readback, WGPUMapMode_Read, 0, rb.size, cbInfo);
       while (!done)
         device->sync();
       std::memcpy(rb.host, wgpuBufferGetMappedRange(rb.readback,0,rb.size), rb.size);

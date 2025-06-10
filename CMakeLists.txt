@@ -105,6 +105,7 @@ add_subdirectory(common)
 add_subdirectory(core)
 add_subdirectory(api)
 add_subdirectory(devices)
+enable_testing()
 add_subdirectory(tests)
 
 # Export targets from the build tree for external projects
