@@ -89,6 +89,7 @@ Ensure environment selects a usable backend
 Hardware Vulkan/Metal or Lavapipe SW fallback.
 
 Run: ctest --output-on-failure -R WebGPU
+Skipped tests return exit code 77 which CTest recognizes as SKIP.
 
 The tests internally:
 
