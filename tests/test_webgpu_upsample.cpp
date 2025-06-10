@@ -1,3 +1,4 @@
+#include "OpenImageDenoise/oidn.hpp"
 #include "OpenImageDenoise/webgpu.h"
 #include "../devices/webgpu/webgpu_engine.h"
 #include "../devices/cpu/cpu_device.h"
@@ -80,11 +81,16 @@ TEST(WebGPU, Upsample2x)
         ref[y*OW+x] = src[(y/2)*W + (x/2)];
   }
 
-  auto A = eng->newTensor(src, WebGPUTensorType::INPUT, N,C,H,W);
-  auto O = eng->newTensor(out, WebGPUTensorType::OUTPUT, C,1,OH,OW);
+  auto srcBuf = dev.newBuffer(sizeof(src));
+  srcBuf.write(0, sizeof(src), src);
+  auto outBuf = dev.newBuffer(sizeof(out));
+
+  auto A = eng->newTensor(srcBuf, WebGPUTensorType::INPUT, N,C,H,W);
+  auto O = eng->newTensor(outBuf, WebGPUTensorType::OUTPUT, C,1,OH,OW);
 
   eng->upsample2x(A,O);
   eng->sync();
+  outBuf.read(0, sizeof(out), out);
 
   for(size_t i=0;i<C*OH*OW;++i)
     ASSERT_NEAR(out[i], ref[i], 1e-6f);

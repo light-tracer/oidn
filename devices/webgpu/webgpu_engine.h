@@ -1,6 +1,7 @@
 #pragma once
 #include "core/engine.h"
 #include "OpenImageDenoise/webgpu.h"
+#include "OpenImageDenoise/oidn.hpp"
 #include <vector>
 #include <unordered_map>
 
@@ -16,6 +17,10 @@ OIDN_NAMESPACE_BEGIN
 
     Device* getDevice() const override;
 
+    // Buffer
+    Ref<Buffer> newBuffer(size_t byteSize, Storage storage) override;
+    Ref<Buffer> newBuffer(void* ptr, size_t byteSize) override;
+
     // Engine interface overrides - currently unsupported operations
     Ref<Conv> newConv(const ConvDesc& desc) override;
     Ref<Pool> newPool(const PoolDesc& desc) override;
@@ -29,6 +34,8 @@ OIDN_NAMESPACE_BEGIN
     void wait() override;
 
     WebGPUTensor newTensor(const float* data, WebGPUTensorType type,
+                           uint32_t n, uint32_t c, uint32_t h, uint32_t w);
+    WebGPUTensor newTensor(const BufferRef& buffer, WebGPUTensorType type,
                            uint32_t n, uint32_t c, uint32_t h, uint32_t w);
 
     void conv2d_eltwise(const WebGPUTensor& src,
