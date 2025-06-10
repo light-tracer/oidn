@@ -36,10 +36,14 @@ OIDN_NAMESPACE_BEGIN
                         const WebGPUTensor& bias,
                         const WebGPUTensor& dst);
 
+    void upsample2x(const WebGPUTensor& src,
+                    const WebGPUTensor& dst);
+
     void sync();
 
   private:
     void initPipeline();
+    void initUpsamplePipeline();
 
     WebGPUDevice* device;
 
@@ -47,6 +51,11 @@ OIDN_NAMESPACE_BEGIN
     WGPUBindGroupLayout bindGroupLayout = nullptr;
     WGPUPipelineLayout pipelineLayout = nullptr;
     WGPUComputePipeline pipeline = nullptr;
+
+    WGPUShaderModule upsampleShaderModule = nullptr;
+    WGPUBindGroupLayout upsampleBindGroupLayout = nullptr;
+    WGPUPipelineLayout upsamplePipelineLayout = nullptr;
+    WGPUComputePipeline upsamplePipeline = nullptr;
 
     struct PendingReadback
     {
