@@ -90,6 +90,10 @@ layout with OIHW weights.  The WebGPU backend now adopts the same layouts and
 the tests still compare its results against the CPU backend for convenience.
 The `test_webgpu_conv` unit test has been updated to compute its reference
 output using the CPU backend instead of a hand-written loop.
+CPU reference functions require calling `setTile()` to cover the full
+image, otherwise the default tile size of zero results in an all-zero
+output.  The WebGPU tests set the tile accordingly before launching both
+the CPU and GPU kernels.
 
 ## Verification Procedure
 Build with -DOIDN_DEVICE_WEBGPU=ON.
