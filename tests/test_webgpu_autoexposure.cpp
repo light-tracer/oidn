@@ -14,7 +14,6 @@ TEST(WebGPU, Autoexposure)
 {
   if (!isWebGPUDeviceSupported())
     GTEST_SKIP();
-  GTEST_SKIP(); // Temporarily skip due to backend issues
 
   auto dev = newWebGPUDevice();
   dev.commit();
@@ -23,8 +22,8 @@ TEST(WebGPU, Autoexposure)
   const uint32_t H=2, W=2;
   float color[H*W*3] = {0.1f,0.2f,0.3f, 0.4f,0.5f,0.6f, 0.7f,0.8f,0.9f, 0.3f,0.2f,0.1f};
   float refVal = 1.f;
-  Ref<Buffer> hostBuf;
   DeviceRef cpuDev;
+  Ref<Buffer> hostBuf;
   CPUEngine* cpuEng = nullptr;
 
   if (isCPUDeviceSupported())
