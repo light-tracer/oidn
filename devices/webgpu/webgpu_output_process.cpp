@@ -11,12 +11,19 @@ OIDN_NAMESPACE_BEGIN
     : OutputProcess(desc), engine(engine) {}
 
   static const char* kWGSL = R"wgsl(
-  struct Tensor { data: array<f32>; };
-  struct Image { data: array<f32>; };
+  struct Tensor { data: array<f32>, };
+  struct Image { data: array<f32>, };
   struct Params {
-    h:u32; w:u32; srcC:u32; dstC:u32; tfType:u32;
-    outputScale:f32; normScale:f32; rcpNormScale:f32;
-    hdr:u32; snorm:u32;
+    h:u32,
+    w:u32,
+    srcC:u32,
+    dstC:u32,
+    tfType:u32,
+    outputScale:f32,
+    normScale:f32,
+    rcpNormScale:f32,
+    hdr:u32,
+    snormFlag:u32,
   };
 
   @group(0) @binding(0) var<storage, read>  src : Tensor;
@@ -66,9 +73,9 @@ OIDN_NAMESPACE_BEGIN
 
   fn sanitize(v: vec3<f32>, minV:f32, maxV:f32) -> vec3<f32> {
     var r = v;
-    if (isNan(r.x)) { r.x = 0.0; }
-    if (isNan(r.y)) { r.y = 0.0; }
-    if (isNan(r.z)) { r.z = 0.0; }
+    if (!(r.x == r.x)) { r.x = 0.0; }
+    if (!(r.y == r.y)) { r.y = 0.0; }
+    if (!(r.z == r.z)) { r.z = 0.0; }
     r = clamp(r, vec3<f32>(minV), vec3<f32>(maxV));
     return r;
   }
@@ -80,15 +87,15 @@ OIDN_NAMESPACE_BEGIN
     if (h >= params.h || w >= params.w) { return; }
     let base = ((h*params.w + w)*params.srcC);
     var value = vec3<f32>(src.data[base],
-                          params.srcC > 1u ? src.data[base+1u] : src.data[base],
-                          params.srcC > 2u ? src.data[base+2u] : src.data[base]);
+                          select(src.data[base], src.data[base+1u], params.srcC > 1u),
+                          select(src.data[base], src.data[base+2u], params.srcC > 2u));
     value = sanitize(value, 0.0, 3.4028235e38);
     value = tf_inverse(value);
     if (params.dstC == 1u) {
       let m = (value.x + value.y + value.z) / 3.0;
       value = vec3<f32>(m,m,m);
     }
-    if (params.snorm != 0u) {
+    if (params.snormFlag != 0u) {
       value = value * 2.0 - vec3<f32>(1.0);
       value = max(value, vec3<f32>(-1.0));
     }
@@ -128,7 +135,7 @@ OIDN_NAMESPACE_BEGIN
     {
       uint32_t h,w,srcC,dstC,tfType;
       float outputScale,normScale,rcpNormScale;
-      uint32_t hdr,snorm;
+      uint32_t hdr,snormFlag;
     } params = { (uint32_t)H,(uint32_t)W,(uint32_t)C,(uint32_t)dstC,(uint32_t)transferFunc->getType(),
                  transferFunc->getOutputScale(), transferFunc->normScale, transferFunc->rcpNormScale,
                  hdr?1u:0u, snorm?1u:0u };
