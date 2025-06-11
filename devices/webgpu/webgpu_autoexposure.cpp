@@ -31,28 +31,25 @@ OIDN_NAMESPACE_BEGIN
     WebGPUBuffer dstBuf(engine, sizeof(float));
 
     static const char* kWGSL = R"wgsl(
-    struct Image { data: array<f32>; };
+    struct Image { data: array<f32>, };
     struct Size { h:u32, w:u32 };
     @group(0) @binding(0) var<storage, read>  src : Image;
     @group(0) @binding(1) var<storage, read_write> dst : array<f32>;
     @group(0) @binding(2) var<uniform> size : Size;
     @compute @workgroup_size(1)
     fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-      var logSum: f32 = 0.0;
-      var count: u32 = 0u;
+      var sum: f32 = 0.0;
       for (var h:u32=0u; h<size.h; h=h+1u) {
         for (var w:u32=0u; w<size.w; w=w+1u) {
           let idx = (h*size.w + w)*3u;
           let L = 0.2126*src.data[idx] + 0.7152*src.data[idx+1u] + 0.0722*src.data[idx+2u];
-          if (L > ${eps}) {
-            logSum = logSum + log2(L);
-            count = count + 1u;
-          }
+          sum = sum + L;
         }
       }
+      let Lavg = sum / f32(size.h * size.w);
       var exposure: f32;
-      if (count > 0u) {
-        exposure = ${key} / exp2(logSum / f32(count));
+      if (Lavg > ${eps}) {
+        exposure = ${key} / Lavg;
       } else {
         exposure = 1.0;
       }

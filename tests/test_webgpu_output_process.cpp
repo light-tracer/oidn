@@ -55,6 +55,7 @@ TEST(WebGPU, OutputProcess)
     proc->setSrc(srcTensor);
     auto dstImg = makeRef<Image>(refImg, Format::Float3, W, H, 0, sizeof(float)*3, sizeof(float)*3*W);
     proc->setDst(dstImg);
+    proc->setTile(0, 0, 0, 0, H, W);
     proc->submit(nullptr);
     cpuDev.sync();
   }
@@ -64,14 +65,20 @@ TEST(WebGPU, OutputProcess)
   }
 
   TensorDesc srcDescGPU({3,int(H),int(W)}, TensorLayout::hwc, DataType::Float32);
-  auto srcBuf = dev.newBuffer(sizeof(srcData));
-  srcBuf.write(0, sizeof(srcData), srcData);
+  float srcDataGPU[H*W*3];
+  for(uint32_t h=0; h<H; ++h)
+    for(uint32_t w=0; w<W; ++w)
+      for(uint32_t c=0; c<3; ++c)
+        srcDataGPU[(h*W + w)*3 + c] = srcData[(size_t)c*H*W + h*W + w];
+  auto srcBuf = dev.newBuffer(sizeof(srcDataGPU));
+  srcBuf.write(0, sizeof(srcDataGPU), srcDataGPU);
   auto srcTensorGPU = eng->Engine::newTensor(Ref<Buffer>(reinterpret_cast<Buffer*>(srcBuf.getHandle())), srcDescGPU);
   auto proc = eng->newOutputProcess({srcDescGPU, std::make_shared<TransferFunction>(TransferFunction::Type::Linear), false, false});
   proc->setSrc(srcTensorGPU);
   float outImg[H*W*3];
   auto dstImgGPU = makeRef<Image>(outImg, Format::Float3, W, H, 0, sizeof(float)*3, sizeof(float)*3*W);
   proc->setDst(dstImgGPU);
+  proc->setTile(0, 0, 0, 0, H, W);
   proc->submit(nullptr);
   dev.sync();
 
@@ -124,19 +131,26 @@ TEST(WebGPU, OutputProcessAdvanced)
     proc->setSrc(srcTensor);
     auto dstImg = makeRef<Image>(refImg, Format::Float3, W, H, 0, sizeof(float)*3, sizeof(float)*3*W);
     proc->setDst(dstImg);
+    proc->setTile(0, 0, 0, 0, H, W);
     proc->submit(nullptr);
     cpuDev.sync();
   }
 
   TensorDesc srcDescGPU({3,int(H),int(W)}, TensorLayout::hwc, DataType::Float32);
-  auto srcBuf = dev.newBuffer(sizeof(srcData));
-  srcBuf.write(0, sizeof(srcData), srcData);
+  float srcDataGPU[H*W*3];
+  for(uint32_t h=0; h<H; ++h)
+    for(uint32_t w=0; w<W; ++w)
+      for(uint32_t c=0; c<3; ++c)
+        srcDataGPU[(h*W + w)*3 + c] = srcData[(size_t)c*H*W + h*W + w];
+  auto srcBuf = dev.newBuffer(sizeof(srcDataGPU));
+  srcBuf.write(0, sizeof(srcDataGPU), srcDataGPU);
   auto srcTensorGPU = eng->Engine::newTensor(Ref<Buffer>(reinterpret_cast<Buffer*>(srcBuf.getHandle())), srcDescGPU);
   auto proc = eng->newOutputProcess({srcDescGPU, std::make_shared<TransferFunction>(TransferFunction::Type::SRGB), true, true});
   proc->setSrc(srcTensorGPU);
   float outImg[H*W*3];
   auto dstImgGPU = makeRef<Image>(outImg, Format::Float3, W, H, 0, sizeof(float)*3, sizeof(float)*3*W);
   proc->setDst(dstImgGPU);
+  proc->setTile(0, 0, 0, 0, H, W);
   proc->submit(nullptr);
   dev.sync();
 
