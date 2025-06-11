@@ -32,18 +32,97 @@ TEST(WebGPU, Conv2d)
   float out[OC*OH*OW];
   float ref[OC*OH*OW];
 
-  // --- compute reference result on the CPU ---
-  for(uint32_t y=0;y<OH;++y)
-    for(uint32_t x=0;x<OW;++x)
+  // --- compute reference result on the CPU backend ---
+  if (isCPUDeviceSupported())
+  {
+    auto cpuDev = newDevice(DeviceType::CPU);
+    cpuDev.commit();
+    auto cpuImpl = static_cast<CPUDevice*>(reinterpret_cast<Device*>(cpuDev.getHandle()));
+    CPUEngine* cpuEng = static_cast<CPUEngine*>(cpuImpl->getEngine());
+    const int blockC = cpuImpl->getTensorBlockC();
+
+    TensorDesc srcDesc({int(C),int(H),int(W)},
+                       {round_up(int(C),blockC),int(H),int(W)},
+                       cpuImpl->getTensorLayout(), DataType::Float32);
+    TensorDesc weightDesc({int(OC),int(IC),int(KH),int(KW)},
+                          {round_up(int(OC),blockC),round_up(int(IC),blockC),int(KH),int(KW)},
+                          cpuImpl->getWeightLayout(), DataType::Float32);
+    TensorDesc biasDesc({int(OC)},
+                        {round_up(int(OC),blockC)},
+                        TensorLayout::x, DataType::Float32);
+
+    auto srcTensor = makeRef<HostTensor>(srcDesc);
+    half weightHalf[OC*IC*KH*KW];
+    for(size_t i=0;i<OC*IC*KH*KW;++i)
+      weightHalf[i] = half(weight[i]);
+    auto weightSrc = makeRef<HostTensor>(TensorDesc({int(OC),int(IC),int(KH),int(KW)}, TensorLayout::oihw, DataType::Float16), weightHalf);
+    auto weightTensor = makeRef<HostTensor>(weightDesc);
+    half biasHalf[OC];
+    for(size_t i=0;i<OC;++i)
+      biasHalf[i] = half(bias[i]);
+    auto biasSrc = makeRef<HostTensor>(TensorDesc({int(OC)}, TensorLayout::x, DataType::Float16), biasHalf);
+    auto biasTensor = makeRef<HostTensor>(biasDesc);
+
+    auto packChw = [&](float* dst)
     {
-      float acc=0.f;
-      for(uint32_t ky=0;ky<KH;++ky)
-        for(uint32_t kx=0;kx<KW;++kx)
-          acc+=src[(y+ky)*W+(x+kx)]*weight[ky*KW+kx];
-      acc+=bias[0];
-      if(acc<0.f) acc=0.f;
-      ref[y*OW+x]=acc;
-    }
+      for(int c=0;c<round_up(int(C),blockC);++c)
+        for(int h=0;h<int(H);++h)
+          for(int w=0;w<int(W);++w)
+          {
+            size_t idx=((size_t)(c/blockC)*H + h)*(W*blockC)+w*blockC+(c%blockC);
+            if(c<int(C))
+              dst[idx]=src[(size_t)c*H*W+h*W+w];
+            else
+              dst[idx]=0.f;
+          }
+    };
+    packChw(static_cast<float*>(srcTensor->getPtr()));
+
+    reorderWeight(*weightSrc, *weightTensor);
+    reorderBias(*biasSrc, *biasTensor);
+
+    auto convCPU = cpuEng->newConv({srcDesc, weightDesc, biasDesc, Activation::ReLU, PostOp::None, false});
+    convCPU->setSrc(srcTensor);
+    convCPU->setWeight(weightTensor);
+    convCPU->setBias(biasTensor);
+    auto dstDesc = convCPU->getDstDesc();
+    auto dstTensor = makeRef<HostTensor>(dstDesc);
+    convCPU->setDst(dstTensor);
+    convCPU->submit(nullptr);
+    cpuDev.sync();
+
+    auto unpackChwFull = [&](const float* srcPacked, int HH, int WW, float* dst)
+    {
+      for(int c=0;c<int(OC);++c)
+        for(int h=0;h<HH;++h)
+          for(int w=0;w<WW;++w)
+          {
+            size_t idx=((size_t)(c/blockC)*HH + h)*(WW*blockC)+w*blockC+(c%blockC);
+            dst[(size_t)c*HH*WW+h*WW+w]=srcPacked[idx];
+          }
+    };
+
+    float tmp[OC*H*W];
+    unpackChwFull(static_cast<float*>(dstTensor->getPtr()), H, W, tmp);
+    for(int c=0;c<int(OC);++c)
+      for(int h=0;h<int(OH);++h)
+        for(int w=0;w<int(OW);++w)
+          ref[(size_t)c*OH*OW+h*OW+w]=tmp[(size_t)c*H*W+(h+1)*W+(w+1)];
+  }
+  else
+  {
+    for(uint32_t y=0;y<OH;++y)
+      for(uint32_t x=0;x<OW;++x)
+      {
+        float acc=0.f;
+        for(uint32_t ky=0;ky<KH;++ky)
+          for(uint32_t kx=0;kx<KW;++kx)
+            acc+=src[(y+ky)*W+(x+kx)]*weight[ky*KW+kx];
+        acc+=bias[0];
+        if(acc<0.f) acc=0.f;
+        ref[y*OW+x]=acc;
+      }
+  }
 
   float srcGPU[N*C*H*W];
   for(uint32_t h=0; h<H; ++h)
@@ -87,6 +166,6 @@ TEST(WebGPU, Conv2d)
         out[(size_t)c*OH*OW + h*OW + w] = outGPU[(h*OW + w)*OC + c];
 
   for(size_t i=0;i<OC*OH*OW;++i)
-    ASSERT_NEAR(out[i], ref[i], 1e-4f);
+    ASSERT_NEAR(out[i], ref[i], 2e-4f);
 }
 

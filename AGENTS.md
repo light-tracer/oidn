@@ -88,6 +88,8 @@ Op classes map these kernels through the standard Engine API and are validated a
 The Metal backend serves as the reference implementation.  It uses NHWC tensor
 layout with OIHW weights.  The WebGPU backend now adopts the same layouts and
 the tests still compare its results against the CPU backend for convenience.
+The `test_webgpu_conv` unit test has been updated to compute its reference
+output using the CPU backend instead of a hand-written loop.
 
 ## Verification Procedure
 Build with -DOIDN_DEVICE_WEBGPU=ON.
