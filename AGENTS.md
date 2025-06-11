@@ -88,7 +88,7 @@ Memory is managed through `WebGPUArena` / `WebGPUHeap`, which allow sub-allocati
 multiple buffers from a single WebGPU buffer.
 Currently kernels for `conv2d_eltwise`, `pool2x2`, `upsample2x`, `add`, `mul`, `softplus`, `input_process`, `output_process`, `image_copy`, and `autoexposure` are implemented in WGSL shaders.
 Earlier revisions executed the last four operations on the CPU, but they now run on the GPU as well.
-Op classes map these kernels through the standard Engine API and are validated against the CPU backend.
+Op classes map these kernels through the standard Engine API and are validated against the CPU backend where a matching CPU implementation exists.
 
 The Metal backend serves as the reference implementation.  It uses NHWC tensor
 layout with OIHW weights.  The WebGPU backend now adopts the same layouts and
@@ -109,9 +109,12 @@ Hardware Vulkan/Metal or Lavapipe SW fallback.
 Run: ctest --output-on-failure -R WebGPU
 Skipped tests return exit code 77 which CTest recognizes as SKIP.
 
-`WebGPU.Autoexposure` now runs successfully after fixing a lifetime issue
-with the CPU reference buffer.  Only `WebGPU.Eltwise` remains skipped due
-to unresolved backend issues.
+`WebGPU.Autoexposure` runs successfully after fixing a lifetime issue
+with the CPU reference buffer. `WebGPU.Eltwise` is still skipped because
+the CPU backend lacks dedicated element-wise kernels and the WebGPU
+implementation sometimes produces non-deterministic results on Lavapipe.
+`WebGPU.EltwiseMetal` attempts to compare the kernels against the Metal
+backend but is skipped unless that backend is available.
 
 `WebGPU.Arena` exercises the buffer heap allocator.
 
