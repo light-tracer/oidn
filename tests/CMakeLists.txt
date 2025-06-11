@@ -19,4 +19,8 @@ add_webgpu_test(webgpu_output_process_test WebGPU.OutputProcess test_webgpu_outp
 add_webgpu_test(webgpu_image_copy_test WebGPU.ImageCopy test_webgpu_image_copy.cpp)
 add_webgpu_test(webgpu_autoexposure_test WebGPU.Autoexposure test_webgpu_autoexposure.cpp)
 add_webgpu_test(webgpu_eltwise_test WebGPU.Eltwise test_webgpu_eltwise.cpp)
+add_webgpu_test(webgpu_eltwise_metal_test WebGPU.EltwiseMetal test_webgpu_eltwise_metal.cpp)
+if(TARGET OpenImageDenoise_device_metal)
+  target_link_libraries(webgpu_eltwise_metal_test PRIVATE OpenImageDenoise_device_metal)
+endif()
 add_webgpu_test(webgpu_arena_test WebGPU.Arena test_webgpu_arena.cpp)
