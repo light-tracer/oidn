@@ -65,6 +65,9 @@ Source tree:
   ├─ webgpu_pool.h / .cpp        # Pool op wrapper
   ├─ webgpu_upsample.h / .cpp    # Upsample op wrapper
   ├─ webgpu_tensor.h             # POD for tensor views
+  ├─ webgpu_buffer.h / .cpp      # device buffer implementation
+  ├─ webgpu_heap.h / .cpp        # heap backing arenas
+  ├─ webgpu_arena.h / .cpp       # simple allocator built on WebGPUHeap
   └─ CMakeLists.txt              # adds option OIDN_DEVICE_WEBGPU
 
 ### Implementation details
@@ -76,6 +79,8 @@ Fixed stride = 1, no padding, arbitrary N,C,H,W.
 Work-group size hard-coded to 8×8×1.
 Host ↔ GPU transfers use the public buffer API (`oidnNewBuffer`, `oidnWriteBuffer`,
 `oidnReadBuffer`).
+Memory is managed through `WebGPUArena` / `WebGPUHeap`, which allow sub-allocating
+multiple buffers from a single WebGPU buffer.
 Currently kernels for `conv2d_eltwise`, `pool2x2`, `upsample2x`, `add`, `mul`, `softplus`, `input_process`, `output_process`, `image_copy`, and `autoexposure` are implemented in WGSL shaders.
 Earlier revisions executed the last four operations on the CPU, but they now run on the GPU as well.
 Op classes map these kernels through the standard Engine API and are validated against the CPU backend.
@@ -93,6 +98,8 @@ Hardware Vulkan/Metal or Lavapipe SW fallback.
 Run: ctest --output-on-failure -R WebGPU
 Skipped tests return exit code 77 which CTest recognizes as SKIP.
 
+`WebGPU.Arena` exercises the buffer heap allocator.
+
 The tests internally:
 
 * prepare deterministic random tensors,
@@ -106,7 +113,7 @@ They pass if
 
 Priority	Task	Brief Description
 P0      Element-wise kernels    **Done** – WGSL implementations of add, mul, and softplus are available.
-P1	Memory allocator	Replace the “one buffer per tensor” strategy with a sub-allocator to reduce memory & improve performance.
+P1      Memory allocator        **Done** – buffers share memory through WebGPUArena/WebGPUHeap.
 P1	Graph execution	Record multiple layers in a single command buffer to amortise overhead.
 P2	Full denoiser demo	Make examples/denoise run on a 256×256 tile using the WebGPU backend.
 P2	Performance passes	Explore workgroup sizes, shared-memory tiling, fused convolution blocks.

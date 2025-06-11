@@ -577,11 +577,11 @@ OIDN_NAMESPACE_BEGIN
                                               &size);
 
     WGPUBindGroupEntry entries[5] = {};
-    entries[0].binding = 0; entries[0].buffer = src.buf; entries[0].size = src.n*src.c*src.h*src.w*sizeof(float);
-    entries[1].binding = 1; entries[1].buffer = weight.buf; entries[1].size = weight.n*weight.c*weight.h*weight.w*sizeof(float);
-    entries[2].binding = 2; entries[2].buffer = bias.buf; entries[2].size = bias.n*bias.c*bias.h*bias.w*sizeof(float);
-    entries[3].binding = 3; entries[3].buffer = dst.buf; entries[3].size = dst.n*dst.c*oh*ow*sizeof(float);
-    entries[4].binding = 4; entries[4].buffer = sizeBuf; entries[4].size = sizeof(Size);
+    entries[0].binding = 0; entries[0].buffer = src.buf; entries[0].offset = src.offset; entries[0].size = src.n*src.c*src.h*src.w*sizeof(float);
+    entries[1].binding = 1; entries[1].buffer = weight.buf; entries[1].offset = weight.offset; entries[1].size = weight.n*weight.c*weight.h*weight.w*sizeof(float);
+    entries[2].binding = 2; entries[2].buffer = bias.buf; entries[2].offset = bias.offset; entries[2].size = bias.n*bias.c*bias.h*bias.w*sizeof(float);
+    entries[3].binding = 3; entries[3].buffer = dst.buf; entries[3].offset = dst.offset; entries[3].size = dst.n*dst.c*oh*ow*sizeof(float);
+    entries[4].binding = 4; entries[4].buffer = sizeBuf; entries[4].offset = 0; entries[4].size = sizeof(Size);
     WGPUBindGroupDescriptor bgDesc{};
     bgDesc.layout = bindGroupLayout;
     bgDesc.entryCount = 5;
@@ -601,7 +601,7 @@ OIDN_NAMESPACE_BEGIN
       size_t outBytes = dst.n*dst.c*oh*ow*sizeof(float);
       WGPUBuffer readback = device->createBuffer(outBytes,
                           WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
-      wgpuCommandEncoderCopyBufferToBuffer(enc, dst.buf, 0, readback, 0, outBytes);
+      wgpuCommandEncoderCopyBufferToBuffer(enc, dst.buf, dst.offset, readback, 0, outBytes);
       readbacks.push_back({dst.buf, readback, outputHosts[dst.buf], outBytes});
     }
 
@@ -630,9 +630,9 @@ OIDN_NAMESPACE_BEGIN
                               &size);
 
     WGPUBindGroupEntry entries[3] = {};
-    entries[0].binding = 0; entries[0].buffer = src.buf; entries[0].size = src.n*src.c*src.h*src.w*sizeof(float);
-    entries[1].binding = 1; entries[1].buffer = dst.buf; entries[1].size = dst.n*dst.c*oh*ow*sizeof(float);
-    entries[2].binding = 2; entries[2].buffer = sizeBuf; entries[2].size = sizeof(Size);
+    entries[0].binding = 0; entries[0].buffer = src.buf; entries[0].offset = src.offset; entries[0].size = src.n*src.c*src.h*src.w*sizeof(float);
+    entries[1].binding = 1; entries[1].buffer = dst.buf; entries[1].offset = dst.offset; entries[1].size = dst.n*dst.c*oh*ow*sizeof(float);
+    entries[2].binding = 2; entries[2].buffer = sizeBuf; entries[2].offset = 0; entries[2].size = sizeof(Size);
 
     WGPUBindGroupDescriptor bgDesc{};
     bgDesc.layout = upsampleBindGroupLayout;
@@ -653,7 +653,7 @@ OIDN_NAMESPACE_BEGIN
       size_t outBytes = dst.n*dst.c*oh*ow*sizeof(float);
       WGPUBuffer readback = device->createBuffer(outBytes,
                           WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
-      wgpuCommandEncoderCopyBufferToBuffer(enc, dst.buf, 0, readback, 0, outBytes);
+      wgpuCommandEncoderCopyBufferToBuffer(enc, dst.buf, dst.offset, readback, 0, outBytes);
       readbacks.push_back({dst.buf, readback, outputHosts[dst.buf], outBytes});
     }
 
@@ -705,7 +705,7 @@ OIDN_NAMESPACE_BEGIN
       size_t outBytes = dst.n*dst.c*oh*ow*sizeof(float);
       WGPUBuffer readback = device->createBuffer(outBytes,
                           WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
-      wgpuCommandEncoderCopyBufferToBuffer(enc, dst.buf, 0, readback, 0, outBytes);
+      wgpuCommandEncoderCopyBufferToBuffer(enc, dst.buf, dst.offset, readback, 0, outBytes);
       readbacks.push_back({dst.buf, readback, outputHosts[dst.buf], outBytes});
     }
 
@@ -752,17 +752,17 @@ OIDN_NAMESPACE_BEGIN
                               WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst,
                               &size);
     WGPUBindGroupEntry entries[4] = {};
-    entries[0].binding = 0; entries[0].buffer = A.buf; entries[0].size = size*sizeof(float);
-    entries[1].binding = 1; entries[1].buffer = B.buf; entries[1].size = size*sizeof(float);
-    entries[2].binding = 2; entries[2].buffer = dst.buf; entries[2].size = size*sizeof(float);
-    entries[3].binding = 3; entries[3].buffer = sizeBuf; entries[3].size = sizeof(uint32_t);
+    entries[0].binding = 0; entries[0].buffer = A.buf; entries[0].offset = A.offset; entries[0].size = size*sizeof(float);
+    entries[1].binding = 1; entries[1].buffer = B.buf; entries[1].offset = B.offset; entries[1].size = size*sizeof(float);
+    entries[2].binding = 2; entries[2].buffer = dst.buf; entries[2].offset = dst.offset; entries[2].size = size*sizeof(float);
+    entries[3].binding = 3; entries[3].buffer = sizeBuf; entries[3].offset = 0; entries[3].size = sizeof(uint32_t);
     dispatch1D(device, addPipeline, addBindGroupLayout, entries, 4, size);
     if (dst.type == WebGPUTensorType::OUTPUT)
     {
       WGPUBuffer readback = device->createBuffer(size*sizeof(float),
                           WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
       WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(device->device, nullptr);
-      wgpuCommandEncoderCopyBufferToBuffer(enc, dst.buf, 0, readback, 0, size*sizeof(float));
+      wgpuCommandEncoderCopyBufferToBuffer(enc, dst.buf, dst.offset, readback, 0, size*sizeof(float));
       WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(enc, nullptr);
       device->submit(cmd);
       wgpuCommandBufferRelease(cmd);
@@ -782,17 +782,17 @@ OIDN_NAMESPACE_BEGIN
                               WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst,
                               &size);
     WGPUBindGroupEntry entries[4] = {};
-    entries[0].binding = 0; entries[0].buffer = A.buf; entries[0].size = size*sizeof(float);
-    entries[1].binding = 1; entries[1].buffer = B.buf; entries[1].size = size*sizeof(float);
-    entries[2].binding = 2; entries[2].buffer = dst.buf; entries[2].size = size*sizeof(float);
-    entries[3].binding = 3; entries[3].buffer = sizeBuf; entries[3].size = sizeof(uint32_t);
+    entries[0].binding = 0; entries[0].buffer = A.buf; entries[0].offset = A.offset; entries[0].size = size*sizeof(float);
+    entries[1].binding = 1; entries[1].buffer = B.buf; entries[1].offset = B.offset; entries[1].size = size*sizeof(float);
+    entries[2].binding = 2; entries[2].buffer = dst.buf; entries[2].offset = dst.offset; entries[2].size = size*sizeof(float);
+    entries[3].binding = 3; entries[3].buffer = sizeBuf; entries[3].offset = 0; entries[3].size = sizeof(uint32_t);
     dispatch1D(device, mulPipeline, mulBindGroupLayout, entries, 4, size);
     if (dst.type == WebGPUTensorType::OUTPUT)
     {
       WGPUBuffer readback = device->createBuffer(size*sizeof(float),
                           WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
       WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(device->device, nullptr);
-      wgpuCommandEncoderCopyBufferToBuffer(enc, dst.buf, 0, readback, 0, size*sizeof(float));
+      wgpuCommandEncoderCopyBufferToBuffer(enc, dst.buf, dst.offset, readback, 0, size*sizeof(float));
       WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(enc, nullptr);
       device->submit(cmd);
       wgpuCommandBufferRelease(cmd);
@@ -811,16 +811,16 @@ OIDN_NAMESPACE_BEGIN
                               WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst,
                               &size);
     WGPUBindGroupEntry entries[3] = {};
-    entries[0].binding = 0; entries[0].buffer = src.buf; entries[0].size = size*sizeof(float);
-    entries[1].binding = 1; entries[1].buffer = dst.buf; entries[1].size = size*sizeof(float);
-    entries[2].binding = 2; entries[2].buffer = sizeBuf; entries[2].size = sizeof(uint32_t);
+    entries[0].binding = 0; entries[0].buffer = src.buf; entries[0].offset = src.offset; entries[0].size = size*sizeof(float);
+    entries[1].binding = 1; entries[1].buffer = dst.buf; entries[1].offset = dst.offset; entries[1].size = size*sizeof(float);
+    entries[2].binding = 2; entries[2].buffer = sizeBuf; entries[2].offset = 0; entries[2].size = sizeof(uint32_t);
     dispatch1D(device, softplusPipeline, softplusBindGroupLayout, entries, 3, size);
     if (dst.type == WebGPUTensorType::OUTPUT)
     {
       WGPUBuffer readback = device->createBuffer(size*sizeof(float),
                           WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
       WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(device->device, nullptr);
-      wgpuCommandEncoderCopyBufferToBuffer(enc, dst.buf, 0, readback, 0, size*sizeof(float));
+      wgpuCommandEncoderCopyBufferToBuffer(enc, dst.buf, dst.offset, readback, 0, size*sizeof(float));
       WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(enc, nullptr);
       device->submit(cmd);
       wgpuCommandBufferRelease(cmd);
