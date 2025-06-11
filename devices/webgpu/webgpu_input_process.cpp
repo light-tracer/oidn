@@ -11,12 +11,20 @@ OIDN_NAMESPACE_BEGIN
     : InputProcess(engine, desc), engine(engine) {}
 
   static const char* kWGSL = R"wgsl(
-  struct Image { data: array<f32>; };
-  struct Tensor { data: array<f32>; };
+  struct Image { data: array<f32>, };
+  struct Tensor { data: array<f32>, };
   struct Params {
-    h:u32; w:u32; c:u32; tfType:u32;
-    inputScale:f32; normScale:f32; rcpNormScale:f32;
-    hdr:u32; snorm:u32; hasAlbedo:u32; hasNormal:u32;
+    h:u32,
+    w:u32,
+    c:u32,
+    tfType:u32,
+    inputScale:f32,
+    normScale:f32,
+    rcpNormScale:f32,
+    hdr:u32,
+    snormFlag:u32,
+    hasAlbedo:u32,
+    hasNormal:u32,
   };
 
   @group(0) @binding(0) var<storage, read>  inputImg : Image;
@@ -68,9 +76,9 @@ OIDN_NAMESPACE_BEGIN
 
   fn sanitize(v: vec3<f32>, minV:f32, maxV:f32) -> vec3<f32> {
     var r = v;
-    if (isNan(r.x)) { r.x = 0.0; }
-    if (isNan(r.y)) { r.y = 0.0; }
-    if (isNan(r.z)) { r.z = 0.0; }
+    if (!(r.x == r.x)) { r.x = 0.0; }
+    if (!(r.y == r.y)) { r.y = 0.0; }
+    if (!(r.z == r.z)) { r.z = 0.0; }
     r = clamp(r, vec3<f32>(minV), vec3<f32>(maxV));
     return r;
   }
@@ -87,10 +95,10 @@ OIDN_NAMESPACE_BEGIN
         inputImg.data[imgIdx+1u],
         inputImg.data[imgIdx+2u]);
     value = value * params.inputScale;
-    let minV = select(0.0, -1.0, params.snorm != 0u);
+    let minV = select(0.0, -1.0, params.snormFlag != 0u);
     let maxV = select(1.0, 3.4028235e38, params.hdr != 0u);
     value = sanitize(value, minV, maxV);
-    if (params.snorm != 0u) {
+    if (params.snormFlag != 0u) {
       value = value * 0.5 + vec3<f32>(0.5);
     }
     value = tf_forward(value);
@@ -173,7 +181,7 @@ OIDN_NAMESPACE_BEGIN
     {
       uint32_t h,w,c,tfType;
       float inputScale,normScale,rcpNormScale;
-      uint32_t hdr,snorm,hasAlbedo,hasNormal;
+      uint32_t hdr,snormFlag,hasAlbedo,hasNormal;
     } params = { (uint32_t)H,(uint32_t)W,(uint32_t)C,(uint32_t)transferFunc->getType(),
                  transferFunc->getInputScale(), transferFunc->normScale, transferFunc->rcpNormScale,
                  hdr ? 1u : 0u, snorm ? 1u : 0u, hasAlbedo ? 1u : 0u, hasNormal ? 1u : 0u };

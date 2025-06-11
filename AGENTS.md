@@ -25,10 +25,12 @@ cmake --build build -j$(nproc)
 ## Running WebGPU Tests with Software Emulation
 WebGPU uses Vulkan by default. In headless environments without a discrete GPU
 you can enable Mesa's Lavapipe CPU driver to emulate Vulkan.
-Set the `VK_ICD_FILENAMES` environment variable before running tests:
+Set the `VK_ICD_FILENAMES` environment variable before running tests.
+`XDG_RUNTIME_DIR` must also point to a writable directory:
 
 ```bash
 export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+export XDG_RUNTIME_DIR=/tmp/xdg
 cd build && ctest --output-on-failure -R WebGPU
 ```
 This forces the Vulkan loader to use Lavapipe so the WebGPU unit tests run
@@ -50,7 +52,7 @@ entirely in software.
 This workspace is ephemeral. Packages installed with `apt-get`, downloaded weights, and built artifacts vanish after the session ends.
 
 ## WebGPU Backend – Current State ✅
-Milestone “single-layer bootstrap” is almost finished:
+Milestone “single-layer bootstrap” is finished:
 
 New device type OIDN_DEVICE_TYPE_WEBGPU should be selectable via public C API.
 

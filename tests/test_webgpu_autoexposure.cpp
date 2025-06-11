@@ -46,7 +46,7 @@ TEST(WebGPU, Autoexposure)
 
   auto autoex = eng->newAutoexposure(ImageDesc(Format::Float3,W,H));
   auto src = makeRef<Image>(color, Format::Float3, W, H, 0, sizeof(float)*3, sizeof(float)*3*W);
-  auto buf = eng->Engine::newBuffer(sizeof(float), Storage::Host);
+  auto buf = eng->newBuffer(sizeof(float), Storage::Host);
   auto dst = makeRef<Record<float>>(buf,0);
   autoex->setSrc(src);
   autoex->setDst(dst);
