@@ -104,6 +104,9 @@ Hardware Vulkan/Metal or Lavapipe SW fallback.
 Run: ctest --output-on-failure -R WebGPU
 Skipped tests return exit code 77 which CTest recognizes as SKIP.
 
+The `WebGPU.Autoexposure` and `WebGPU.Eltwise` unit tests are currently
+skipped due to unresolved backend issues.
+
 `WebGPU.Arena` exercises the buffer heap allocator.
 
 The tests internally:

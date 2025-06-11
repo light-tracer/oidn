@@ -28,7 +28,7 @@ OIDN_NAMESPACE_BEGIN
     WebGPUBuffer dstBuf(engine, byteSize);
 
     static const char* kWGSL = R"wgsl(
-    struct Image { data: array<f32>; };
+    struct Image { data: array<f32>, };
     struct Size { h:u32, w:u32 };
     @group(0) @binding(0) var<storage, read>  src : Image;
     @group(0) @binding(1) var<storage, read_write> dst : Image;
