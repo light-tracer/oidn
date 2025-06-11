@@ -50,6 +50,11 @@ entirely in software.
 
 ## Environment Persistence
 This workspace is ephemeral. Packages installed with `apt-get`, downloaded weights, and built artifacts vanish after the session ends.
+The only presistent thing is commited code. While iterating on code feel free to add special comments like:
+
+// AICODE-NOTE: info useful to keep between iterations or sessions
+// AICODE-TODO: mini-tasks for agent(s) to keep track of between iterations or sessions
+// AICODE-ASK: open questions stored for later or for human to answer
 
 ## WebGPU Backend – Current State ✅
 Milestone “single-layer bootstrap” is finished:
