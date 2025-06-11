@@ -32,8 +32,25 @@ TEST(WebGPU, OutputProcess)
     cpuDev.commit();
     auto cpuImpl = static_cast<CPUDevice*>(reinterpret_cast<Device*>(cpuDev.getHandle()));
     CPUEngine* cpuEng = static_cast<CPUEngine*>(cpuImpl->getEngine());
-    TensorDesc srcDesc({3,int(H),int(W)}, cpuImpl->getTensorLayout(), DataType::Float32);
-    auto srcTensor = makeRef<HostTensor>(srcDesc, srcData);
+    TensorDesc srcDesc({3,int(H),int(W)},
+                       {round_up(3,cpuImpl->getTensorBlockC()),int(H),int(W)},
+                       cpuImpl->getTensorLayout(), DataType::Float32);
+    auto srcTensor = makeRef<HostTensor>(srcDesc);
+    auto pack = [&](const float* src, float* dst)
+    {
+      const int blockC = cpuImpl->getTensorBlockC();
+      for(int c=0;c<round_up(3,blockC);++c)
+        for(int h=0;h<int(H);++h)
+          for(int w=0;w<int(W);++w)
+          {
+            size_t idx=((size_t)(c/blockC)*H + h)*(W*blockC)+w*blockC+(c%blockC);
+            if(c<3)
+              dst[idx]=src[(size_t)c*H*W+h*W+w];
+            else
+              dst[idx]=0.f;
+          }
+    };
+    pack(srcData, static_cast<float*>(srcTensor->getPtr()));
     auto proc = cpuEng->newOutputProcess({srcDesc, std::make_shared<TransferFunction>(TransferFunction::Type::Linear), false, false});
     proc->setSrc(srcTensor);
     auto dstImg = makeRef<Image>(refImg, Format::Float3, W, H, 0, sizeof(float)*3, sizeof(float)*3*W);
@@ -84,8 +101,25 @@ TEST(WebGPU, OutputProcessAdvanced)
     cpuDev.commit();
     auto cpuImpl = static_cast<CPUDevice*>(reinterpret_cast<Device*>(cpuDev.getHandle()));
     CPUEngine* cpuEng = static_cast<CPUEngine*>(cpuImpl->getEngine());
-    TensorDesc srcDesc({3,int(H),int(W)}, cpuImpl->getTensorLayout(), DataType::Float32);
-    auto srcTensor = makeRef<HostTensor>(srcDesc, srcData);
+    TensorDesc srcDesc({3,int(H),int(W)},
+                       {round_up(3,cpuImpl->getTensorBlockC()),int(H),int(W)},
+                       cpuImpl->getTensorLayout(), DataType::Float32);
+    auto srcTensor = makeRef<HostTensor>(srcDesc);
+    auto pack = [&](const float* src, float* dst)
+    {
+      const int blockC = cpuImpl->getTensorBlockC();
+      for(int c=0;c<round_up(3,blockC);++c)
+        for(int h=0;h<int(H);++h)
+          for(int w=0;w<int(W);++w)
+          {
+            size_t idx=((size_t)(c/blockC)*H + h)*(W*blockC)+w*blockC+(c%blockC);
+            if(c<3)
+              dst[idx]=src[(size_t)c*H*W+h*W+w];
+            else
+              dst[idx]=0.f;
+          }
+    };
+    pack(srcData, static_cast<float*>(srcTensor->getPtr()));
     auto proc = cpuEng->newOutputProcess({srcDesc, std::make_shared<TransferFunction>(TransferFunction::Type::SRGB), true, true});
     proc->setSrc(srcTensor);
     auto dstImg = makeRef<Image>(refImg, Format::Float3, W, H, 0, sizeof(float)*3, sizeof(float)*3*W);
