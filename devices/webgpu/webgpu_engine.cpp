@@ -523,8 +523,8 @@ OIDN_NAMESPACE_BEGIN
     softplusPipeline = wgpuDeviceCreateComputePipeline(device->device, &cpDesc);
   }
 
-  WebGPUTensor WebGPUEngine::newTensor(const float* data, WebGPUTensorType type,
-                                       uint32_t n, uint32_t c, uint32_t h, uint32_t w)
+  WebGPUTensor WebGPUEngine::makeTensor(const float* data, WebGPUTensorType type,
+                                        uint32_t n, uint32_t c, uint32_t h, uint32_t w)
   {
     size_t count = size_t(n) * c * h * w;
     size_t bytes = count * sizeof(float);
@@ -541,8 +541,8 @@ OIDN_NAMESPACE_BEGIN
     return {buf,0,n,c,h,w,type};
   }
 
-  WebGPUTensor WebGPUEngine::newTensor(const BufferRef& buffer, WebGPUTensorType type,
-                                       uint32_t n, uint32_t c, uint32_t h, uint32_t w)
+  WebGPUTensor WebGPUEngine::makeTensor(const BufferRef& buffer, WebGPUTensorType type,
+                                        uint32_t n, uint32_t c, uint32_t h, uint32_t w)
   {
     Buffer* bufObj = reinterpret_cast<Buffer*>(buffer.getHandle());
     WebGPUBuffer* wb = dynamic_cast<WebGPUBuffer*>(bufObj);
