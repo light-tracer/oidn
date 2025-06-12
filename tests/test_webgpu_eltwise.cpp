@@ -42,9 +42,9 @@ TEST(WebGPU, EltwiseAdd)
   bufA.write(0,sizeof(a),a);
   bufB.write(0,sizeof(b),b);
 
-  auto tA = eng->newTensor(BufferRef(bufA.getHandle()), WebGPUTensorType::INPUT, 1,1,1,W);
-  auto tB = eng->newTensor(BufferRef(bufB.getHandle()), WebGPUTensorType::INPUT, 1,1,1,W);
-  auto tOut= eng->newTensor(BufferRef(bufOut.getHandle()), WebGPUTensorType::INPUT, 1,1,1,W);
+  auto tA = eng->makeTensor(BufferRef(bufA.getHandle()), WebGPUTensorType::INPUT, 1,1,1,W);
+  auto tB = eng->makeTensor(BufferRef(bufB.getHandle()), WebGPUTensorType::INPUT, 1,1,1,W);
+  auto tOut= eng->makeTensor(BufferRef(bufOut.getHandle()), WebGPUTensorType::INPUT, 1,1,1,W);
 
   eng->add(tA,tB,tOut);
   dev.sync();
@@ -76,9 +76,9 @@ TEST(WebGPU, EltwiseMul)
   auto bufA=dev.newBuffer(sizeof(a)); bufA.write(0,sizeof(a),a);
   auto bufB=dev.newBuffer(sizeof(b)); bufB.write(0,sizeof(b),b);
   auto bufOut=dev.newBuffer(sizeof(ref));
-  auto tA = eng->newTensor(BufferRef(bufA.getHandle()), WebGPUTensorType::INPUT, 1,1,1,W);
-  auto tB = eng->newTensor(BufferRef(bufB.getHandle()), WebGPUTensorType::INPUT, 1,1,1,W);
-  auto tOut= eng->newTensor(BufferRef(bufOut.getHandle()), WebGPUTensorType::INPUT, 1,1,1,W);
+  auto tA = eng->makeTensor(BufferRef(bufA.getHandle()), WebGPUTensorType::INPUT, 1,1,1,W);
+  auto tB = eng->makeTensor(BufferRef(bufB.getHandle()), WebGPUTensorType::INPUT, 1,1,1,W);
+  auto tOut= eng->makeTensor(BufferRef(bufOut.getHandle()), WebGPUTensorType::INPUT, 1,1,1,W);
 
   eng->mul(tA,tB,tOut);
   dev.sync();
@@ -107,8 +107,8 @@ TEST(WebGPU, EltwiseSoftplus)
 
   auto bufA=dev.newBuffer(sizeof(a)); bufA.write(0,sizeof(a),a);
   auto bufOut=dev.newBuffer(sizeof(ref));
-  auto tA = eng->newTensor(BufferRef(bufA.getHandle()), WebGPUTensorType::INPUT, 1,1,1,W);
-  auto tOut= eng->newTensor(BufferRef(bufOut.getHandle()), WebGPUTensorType::INPUT, 1,1,1,W);
+  auto tA = eng->makeTensor(BufferRef(bufA.getHandle()), WebGPUTensorType::INPUT, 1,1,1,W);
+  auto tOut= eng->makeTensor(BufferRef(bufOut.getHandle()), WebGPUTensorType::INPUT, 1,1,1,W);
 
   eng->softplus(tA,tOut);
   dev.sync();
