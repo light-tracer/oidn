@@ -3,6 +3,20 @@
 
 cmake_minimum_required(VERSION 3.15)
 
+if(APPLE)
+  if(NOT DEFINED CMAKE_OSX_ARCHITECTURES)
+    set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64"
+        CACHE STRING "Architectures to build for on macOS")
+  endif()
+
+  if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0"
+        CACHE STRING "Minimum macOS version to target")
+  endif()
+
+  message(STATUS "Building for macOS")
+endif()
+
 # Get the library version
 include(cmake/oidn_version.cmake)
 
@@ -35,9 +49,26 @@ elseif(OIDN_ARCH STREQUAL "ARM64")
   option(OIDN_DEVICE_METAL "Enable Metal device." OFF)
 endif()
 
+# Force a minimal Metal-only configuration to avoid CPU/TBB dependencies.
+set(OIDN_DEVICE_CPU OFF CACHE BOOL "CPU backend disabled for Metal-only build." FORCE)
+set(OIDN_DEVICE_SYCL OFF CACHE BOOL "SYCL backend disabled for Metal-only build." FORCE)
+set(OIDN_DEVICE_CUDA OFF CACHE BOOL "CUDA backend disabled for Metal-only build." FORCE)
+set(OIDN_DEVICE_HIP OFF CACHE BOOL "HIP backend disabled for Metal-only build." FORCE)
+if(DEFINED OIDN_DEVICE_METAL)
+  set(OIDN_DEVICE_METAL ON CACHE BOOL "Metal backend enabled for Metal-only build." FORCE)
+else()
+  message(FATAL_ERROR "Metal backend requested for minimal build, but this platform does not support OIDN_DEVICE_METAL.")
+endif()
+
+# Always produce relocatable archives for distribution.
+set(OIDN_ZIP_MODE ON CACHE BOOL "ZIP packaging forced for Metal-only distribution." FORCE)
+
 # Filters
 option(OIDN_FILTER_RT "Include trained weights of the RT filter." ON)
 option(OIDN_FILTER_RTLIGHTMAP "Include trained weights of the RTLightmap filter." ON)
+
+# Strip RTLightmap weights for minimal Metal-only configuration.
+set(OIDN_FILTER_RTLIGHTMAP OFF CACHE BOOL "RTLightmap weights excluded for minimal build." FORCE)
 
 # Install
 option(OIDN_INSTALL_DEPENDENCIES "Install Open Image Denoise dependencies." OFF)
