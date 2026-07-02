@@ -66,6 +66,9 @@ OIDN_NAMESPACE_BEGIN
     if (dstHostPtr == nullptr && byteSize > 0)
       throw Exception(Error::InvalidArgument, "destination host pointer is null");
 
+    // Make sure any pending compute work producing this buffer is submitted
+    engine->flush();
+
     auto* dev = static_cast<WebGPUDevice*>(engine->getDevice());
     WGPUBuffer readback = dev->createBuffer(byteSize,
                                  WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
@@ -101,6 +104,9 @@ OIDN_NAMESPACE_BEGIN
       throw Exception(Error::InvalidArgument, "buffer region is out of bounds");
     if (srcHostPtr == nullptr && byteSize > 0)
       throw Exception(Error::InvalidArgument, "source host pointer is null");
+
+    // Keep queue ordering: submit any pending compute work first
+    engine->flush();
 
     auto* dev = static_cast<WebGPUDevice*>(engine->getDevice());
     WGPUBuffer staging = dev->createBuffer(byteSize,

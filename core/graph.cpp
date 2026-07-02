@@ -7,9 +7,7 @@
 #include "concat_conv_chw.h"
 #include "concat_conv_hwc.h"
 #include "tensor_reorder.h"
-#if defined(OIDN_MICROBENCH)
-  #include "common/timer.h"
-#endif
+#include "common/timer.h"
 
 OIDN_NAMESPACE_BEGIN
 
@@ -463,9 +461,22 @@ OIDN_NAMESPACE_BEGIN
     std::cerr << "op,name,msec" << std::endl;
   #endif
 
+    // Debug: time each op individually (set OIDN_TIME_OPS=1). Forces a full
+    // device sync per op, so the total is pessimistic on GPU backends.
+    static const bool timeOps = std::getenv("OIDN_TIME_OPS") != nullptr;
+
     for (size_t i = 0; i < ops.size(); ++i)
     {
+      Timer opTimer;
+
       ops[i]->submit(progress);
+
+      if (timeOps)
+      {
+        engine->wait();
+        std::cout << i << ": " << ops[i]->getName()
+                  << " " << opTimer.query() * 1000 << " ms" << std::endl;
+      }
 
     #if defined(OIDN_MICROBENCH)
       engine->wait();

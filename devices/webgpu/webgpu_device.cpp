@@ -2,6 +2,7 @@
 #include "webgpu_engine.h"
 #include "core/context.h"
 #include <cstring>
+#include <iostream>
 #include <webgpu/wgpu.h>
 
 OIDN_NAMESPACE_BEGIN
@@ -60,6 +61,7 @@ OIDN_NAMESPACE_BEGIN
       throw std::runtime_error("failed to create WebGPU instance");
 
     WGPURequestAdapterOptions opts{};
+    opts.powerPreference = WGPUPowerPreference_HighPerformance;
     WGPURequestAdapterCallbackInfo adapterCb{};
     adapterCb.mode = WGPUCallbackMode_AllowProcessEvents;
     adapterCb.callback = handle_request_adapter;
@@ -67,6 +69,18 @@ OIDN_NAMESPACE_BEGIN
     wgpuInstanceRequestAdapter(instance, &opts, adapterCb);
     while (!adapter)
       wgpuInstanceProcessEvents(instance);
+
+    if (isVerbose())
+    {
+      WGPUAdapterInfo info{};
+      if (wgpuAdapterGetInfo(adapter, &info) == WGPUStatus_Success)
+      {
+        std::cout << "  Adapter : ";
+        std::cout.write(info.device.data, info.device.length);
+        std::cout << std::endl;
+        wgpuAdapterInfoFreeMembers(info);
+      }
+    }
 
     if (isVerbose(2))
     {
@@ -87,11 +101,12 @@ OIDN_NAMESPACE_BEGIN
 
     queue = wgpuDeviceGetQueue(device);
 
-    // Use the same native tensor layouts as the Metal backend (NHWC / OIHW)
+    // HWC tensors (like Metal); OHWI weights so that input channels are
+    // contiguous in memory, enabling vec4 loads in the conv kernel
     tensorDataType = DataType::Float32;
     weightDataType = DataType::Float32;
     tensorLayout   = TensorLayout::hwc;
-    weightLayout   = TensorLayout::oihw;
+    weightLayout   = TensorLayout::ohwi;
     tensorBlockC   = 1;
 
     subdevices.emplace_back(new Subdevice(std::unique_ptr<Engine>(new WebGPUEngine(this))));

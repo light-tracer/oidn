@@ -75,6 +75,24 @@ OIDN_NAMESPACE_BEGIN
 
     void sync();
 
+    // Command batching: ops record their compute passes into a shared pending
+    // encoder; flush() finishes and submits it. Buffer reads/writes and sync()
+    // flush automatically to keep queue ordering correct.
+    WGPUCommandEncoder getEncoder();
+    void flush();
+
+    // Cached compute pipeline for ops with static WGSL sources (keyed by the
+    // source pointer). bindingTypes describes the buffer bindings in order.
+    struct CachedPipeline
+    {
+      WGPUShaderModule module = nullptr;
+      WGPUBindGroupLayout bindGroupLayout = nullptr;
+      WGPUPipelineLayout pipelineLayout = nullptr;
+      WGPUComputePipeline pipeline = nullptr;
+    };
+    const CachedPipeline& getPipeline(const char* code,
+                                      std::initializer_list<WGPUBufferBindingType> bindingTypes);
+
   private:
     void initPipeline();
     void initUpsamplePipeline();
@@ -89,6 +107,11 @@ OIDN_NAMESPACE_BEGIN
     WGPUBindGroupLayout bindGroupLayout = nullptr;
     WGPUPipelineLayout pipelineLayout = nullptr;
     WGPUComputePipeline pipeline = nullptr;
+
+    // Vectorized conv variant (input channels multiple of 4); shares
+    // bindGroupLayout/pipelineLayout with the scalar conv pipeline
+    WGPUShaderModule convVec4ShaderModule = nullptr;
+    WGPUComputePipeline convVec4Pipeline = nullptr;
 
     WGPUShaderModule upsampleShaderModule = nullptr;
     WGPUBindGroupLayout upsampleBindGroupLayout = nullptr;
@@ -116,6 +139,8 @@ OIDN_NAMESPACE_BEGIN
     WGPUComputePipeline softplusPipeline = nullptr;
 
     WGPUBuffer dummyBuf = nullptr;
+    WGPUCommandEncoder pendingEncoder = nullptr;
+    std::unordered_map<const char*, CachedPipeline> pipelineCache;
 
     struct PendingReadback
     {

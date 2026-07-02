@@ -54,21 +54,21 @@ TEST(WebGPU, ConcatConv)
   // Device tensors
   TensorDesc src1Desc({C1,H,W}, TensorLayout::hwc, DataType::Float32);
   TensorDesc src2Desc({C2,H,W}, TensorLayout::hwc, DataType::Float32);
-  TensorDesc weightDesc({OC,IC,KH,KW}, TensorLayout::oihw, DataType::Float32);
+  TensorDesc weightDesc({OC,IC,KH,KW}, TensorLayout::ohwi, DataType::Float32);
   TensorDesc biasDesc({OC}, TensorLayout::x, DataType::Float32);
 
   ConcatConvDesc desc{src1Desc, src2Desc, weightDesc, biasDesc, Activation::ReLU, false};
   ConcatConvHWC concatConv(eng, desc);
 
-  // Split weights: conv1 gets input channels [0,C1), conv2 gets [C1,IC)
+  // Split weights (OHWI layout): conv1 gets input channels [0,C1), conv2 gets [C1,IC)
   std::vector<float> w1(OC*C1*KH*KW), w2(OC*C2*KH*KW);
   for (int o=0;o<OC;++o)
     for (int c=0;c<IC;++c)
       for (int k=0;k<KH*KW;++k)
       {
-        float v = weight[(o*IC + c)*KH*KW + k];
-        if (c < C1) w1[(o*C1 + c)*KH*KW + k] = v;
-        else        w2[(o*C2 + (c-C1))*KH*KW + k] = v;
+        float v = weight[(o*IC + c)*KH*KW + k]; // reference array is OIHW
+        if (c < C1) w1[(o*KH*KW + k)*C1 + c] = v;
+        else        w2[(o*KH*KW + k)*C2 + (c-C1)] = v;
       }
 
   auto makeDevTensor = [&](const TensorDesc& td, const void* data, size_t byteSize)

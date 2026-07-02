@@ -131,16 +131,24 @@ TEST(WebGPU, Conv2d)
       for(uint32_t c=0; c<C; ++c)
         srcGPU[(h*W + w)*C + c] = src[(size_t)c*H*W + h*W + w];
 
+  // The WebGPU backend uses OHWI weights (input channels contiguous)
+  float weightGPU[OC*IC*KH*KW];
+  for(uint32_t o=0; o<OC; ++o)
+    for(uint32_t c=0; c<IC; ++c)
+      for(uint32_t ky=0; ky<KH; ++ky)
+        for(uint32_t kx=0; kx<KW; ++kx)
+          weightGPU[((o*KH + ky)*KW + kx)*IC + c] = weight[((o*IC + c)*KH + ky)*KW + kx];
+
   auto srcBuf = dev.newBuffer(sizeof(srcGPU));
   srcBuf.write(0, sizeof(srcGPU), srcGPU);
-  auto wBuf = dev.newBuffer(sizeof(weight));
-  wBuf.write(0, sizeof(weight), weight);
+  auto wBuf = dev.newBuffer(sizeof(weightGPU));
+  wBuf.write(0, sizeof(weightGPU), weightGPU);
   auto bBuf = dev.newBuffer(sizeof(bias));
   bBuf.write(0, sizeof(bias), bias);
   auto outBuf = dev.newBuffer(sizeof(out));
 
   TensorDesc srcDescGPU({int(C),int(H),int(W)}, TensorLayout::hwc, DataType::Float32);
-  TensorDesc wDescGPU({int(OC),int(IC),int(KH),int(KW)}, TensorLayout::oihw, DataType::Float32);
+  TensorDesc wDescGPU({int(OC),int(IC),int(KH),int(KW)}, TensorLayout::ohwi, DataType::Float32);
   TensorDesc bDescGPU({int(OC)}, TensorLayout::x, DataType::Float32);
 
   auto srcTensorGPU = eng->Engine::newTensor(Ref<Buffer>(reinterpret_cast<Buffer*>(srcBuf.getHandle())), srcDescGPU);

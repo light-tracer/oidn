@@ -40,20 +40,27 @@ OIDN_NAMESPACE_BEGIN
                   pad0: u32, pad1: u32, pad2: u32, };
   @group(0) @binding(4) var<uniform> p: Params;
 
-  // Convolution result (without bias) at position (cy, cx) of the same-padded
-  // conv output grid (ih x iw)
-  fn conv_at(cy: i32, cx: i32, oc: u32) -> f32 {
-    var acc: f32 = 0.0;
-    for (var ic: u32 = 0u; ic < p.ic; ic = ic + 1u) {
-      for (var ky: u32 = 0u; ky < p.kh; ky = ky + 1u) {
-        let iy = cy + i32(ky) - i32(p.padH);
-        if (iy < 0 || iy >= i32(p.ih)) { continue; }
-        for (var kx: u32 = 0u; kx < p.kw; kx = kx + 1u) {
-          let ix = cx + i32(kx) - i32(p.padW);
-          if (ix < 0 || ix >= i32(p.iw)) { continue; }
-          let srcIdx = (u32(iy) * p.iw + u32(ix)) * p.ic + ic;
-          let wIdx   = ((oc * p.ic + ic) * p.kh + ky) * p.kw + kx;
-          acc = acc + src.data[srcIdx] * weight.data[wIdx];
+  // 4 consecutive output channels at position (cy, cx) of the same-padded
+  // conv output grid (ih x iw). Weights are in OHWI layout. Out-of-range
+  // output channels are computed with clamped weight reads and discarded by
+  // the caller.
+  fn conv4_at(cy: i32, cx: i32, oc0: u32) -> vec4<f32> {
+    let wStride = p.kh * p.kw * p.ic; // between consecutive output channels
+    var acc = vec4<f32>(0.0);
+    for (var ky: u32 = 0u; ky < p.kh; ky = ky + 1u) {
+      let iy = cy + i32(ky) - i32(p.padH);
+      if (iy < 0 || iy >= i32(p.ih)) { continue; }
+      for (var kx: u32 = 0u; kx < p.kw; kx = kx + 1u) {
+        let ix = cx + i32(kx) - i32(p.padW);
+        if (ix < 0 || ix >= i32(p.iw)) { continue; }
+        let sBase = (u32(iy) * p.iw + u32(ix)) * p.ic;
+        let wBase = ((oc0 * p.kh + ky) * p.kw + kx) * p.ic;
+        for (var ic: u32 = 0u; ic < p.ic; ic = ic + 1u) {
+          let s = src.data[sBase + ic];
+          acc.x = acc.x + s * weight.data[wBase + ic];
+          acc.y = acc.y + s * weight.data[wBase + wStride + ic];
+          acc.z = acc.z + s * weight.data[wBase + 2u * wStride + ic];
+          acc.w = acc.w + s * weight.data[wBase + 3u * wStride + ic];
         }
       }
     }
@@ -64,40 +71,135 @@ OIDN_NAMESPACE_BEGIN
   fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let ox = gid.x;
     let oy = gid.y;
-    let oc = gid.z;
-    if (ox >= p.ow || oy >= p.oh || oc >= p.oc) { return; }
+    let oc0 = gid.z * 4u;
+    if (ox >= p.ow || oy >= p.oh || oc0 >= p.oc) { return; }
 
-    var acc: f32;
+    var acc: vec4<f32>;
     if (p.postOp == 1u) {
       // max pooling commutes with the bias add and (monotonic) ReLU
       let y0 = i32(oy * 2u);
       let x0 = i32(ox * 2u);
-      var m = conv_at(y0, x0, oc);
-      m = max(m, conv_at(y0, x0 + 1, oc));
-      m = max(m, conv_at(y0 + 1, x0, oc));
-      m = max(m, conv_at(y0 + 1, x0 + 1, oc));
+      var m = conv4_at(y0, x0, oc0);
+      m = max(m, conv4_at(y0, x0 + 1, oc0));
+      m = max(m, conv4_at(y0 + 1, x0, oc0));
+      m = max(m, conv4_at(y0 + 1, x0 + 1, oc0));
       acc = m;
     } else if (p.postOp == 2u) {
-      acc = conv_at(i32(oy / 2u), i32(ox / 2u), oc);
+      acc = conv4_at(i32(oy / 2u), i32(ox / 2u), oc0);
     } else {
-      acc = conv_at(i32(oy), i32(ox), oc);
+      acc = conv4_at(i32(oy), i32(ox), oc0);
     }
 
-    let dstIdx = (oy * p.ow + ox) * p.oc + oc;
-    var b: f32;
-    if (p.biasMode == 0u) {
-      b = bias.data[oc];
-    } else if (p.biasMode == 1u) {
-      b = bias.data[dstIdx];
-    } else {
-      b = dst.data[dstIdx];
+    let dstBase = (oy * p.ow + ox) * p.oc + oc0;
+    let n = min(4u, p.oc - oc0);
+    for (var j: u32 = 0u; j < n; j = j + 1u) {
+      var v = acc[j];
+      if (p.biasMode == 0u) {
+        v = v + bias.data[oc0 + j];
+      } else if (p.biasMode == 1u) {
+        v = v + bias.data[dstBase + j];
+      } else {
+        v = v + dst.data[dstBase + j];
+      }
+      if (p.activation == 1u && v < 0.0) { v = 0.0; }
+      dst.data[dstBase + j] = v;
     }
-    acc = acc + b;
-    if (p.activation == 1u && acc < 0.0) { acc = 0.0; }
-    dst.data[dstIdx] = acc;
   }
   )wgsl";
 
+  // Vectorized variant used when the input channel count is a multiple of 4:
+  // src and weight (OHWI) are read as vec4s, and each invocation computes 4
+  // consecutive output channels, amortizing the src loads.
+  static const char* kConv2dVec4WGSL = R"wgsl(
+  struct TensorF { data: array<f32>, };
+  struct TensorV { data: array<vec4<f32>>, };
+
+  @group(0) @binding(0) var<storage, read_write> src   : TensorV;
+  @group(0) @binding(1) var<storage, read_write> weight: TensorV;
+  @group(0) @binding(2) var<storage, read_write> bias  : TensorF;
+  @group(0) @binding(3) var<storage, read_write> dst   : TensorF;
+
+  struct Params { ic: u32, ih: u32, iw: u32,
+                  oc: u32, oh: u32, ow: u32,
+                  kh: u32, kw: u32,
+                  padH: u32, padW: u32,
+                  activation: u32,
+                  biasMode: u32,
+                  postOp: u32,
+                  pad0: u32, pad1: u32, pad2: u32, };
+  @group(0) @binding(4) var<uniform> p: Params;
+
+  // 4 consecutive output channels (oc0..oc0+3) at conv grid position (cy, cx).
+  // Out-of-range output channels are computed with clamped weight reads and
+  // discarded by the caller.
+  fn conv4_at(cy: i32, cx: i32, oc0: u32) -> vec4<f32> {
+    let ic4 = p.ic / 4u;
+    let wStride = p.kh * p.kw * ic4; // between consecutive output channels
+    var acc0: f32 = 0.0;
+    var acc1: f32 = 0.0;
+    var acc2: f32 = 0.0;
+    var acc3: f32 = 0.0;
+    for (var ky: u32 = 0u; ky < p.kh; ky = ky + 1u) {
+      let iy = cy + i32(ky) - i32(p.padH);
+      if (iy < 0 || iy >= i32(p.ih)) { continue; }
+      for (var kx: u32 = 0u; kx < p.kw; kx = kx + 1u) {
+        let ix = cx + i32(kx) - i32(p.padW);
+        if (ix < 0 || ix >= i32(p.iw)) { continue; }
+        let sBase = (u32(iy) * p.iw + u32(ix)) * ic4;
+        let wBase = ((oc0 * p.kh + ky) * p.kw + kx) * ic4;
+        for (var i: u32 = 0u; i < ic4; i = i + 1u) {
+          let s = src.data[sBase + i];
+          acc0 = acc0 + dot(s, weight.data[wBase + i]);
+          acc1 = acc1 + dot(s, weight.data[wBase + wStride + i]);
+          acc2 = acc2 + dot(s, weight.data[wBase + 2u * wStride + i]);
+          acc3 = acc3 + dot(s, weight.data[wBase + 3u * wStride + i]);
+        }
+      }
+    }
+    return vec4<f32>(acc0, acc1, acc2, acc3);
+  }
+
+  @compute @workgroup_size(8, 8, 1)
+  fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let ox = gid.x;
+    let oy = gid.y;
+    let oc0 = gid.z * 4u;
+    if (ox >= p.ow || oy >= p.oh || oc0 >= p.oc) { return; }
+
+    var acc: vec4<f32>;
+    if (p.postOp == 1u) {
+      let y0 = i32(oy * 2u);
+      let x0 = i32(ox * 2u);
+      var m = conv4_at(y0, x0, oc0);
+      m = max(m, conv4_at(y0, x0 + 1, oc0));
+      m = max(m, conv4_at(y0 + 1, x0, oc0));
+      m = max(m, conv4_at(y0 + 1, x0 + 1, oc0));
+      acc = m;
+    } else if (p.postOp == 2u) {
+      acc = conv4_at(i32(oy / 2u), i32(ox / 2u), oc0);
+    } else {
+      acc = conv4_at(i32(oy), i32(ox), oc0);
+    }
+
+    let dstBase = (oy * p.ow + ox) * p.oc + oc0;
+    let n = min(4u, p.oc - oc0);
+    for (var j: u32 = 0u; j < n; j = j + 1u) {
+      var v = acc[j];
+      if (p.biasMode == 0u) {
+        v = v + bias.data[oc0 + j];
+      } else if (p.biasMode == 1u) {
+        v = v + bias.data[dstBase + j];
+      } else {
+        v = v + dst.data[dstBase + j];
+      }
+      if (p.activation == 1u && v < 0.0) { v = 0.0; }
+      dst.data[dstBase + j] = v;
+    }
+  }
+  )wgsl";
+
+  // The channel is the innermost dimension of HWC tensors, so threads iterate
+  // channel-first (gid.x = ox*C + c) to keep loads/stores coalesced
   static const char* kPoolWGSL = R"wgsl(
   struct Tensor { data: array<f32>, };
 
@@ -106,25 +208,23 @@ OIDN_NAMESPACE_BEGIN
   struct Size { n: u32, c: u32, h: u32, w: u32, oh: u32, ow: u32, };
   @group(0) @binding(2) var<uniform> size: Size;
 
-  @compute @workgroup_size(8, 8, 1)
+  @compute @workgroup_size(256, 1, 1)
   fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let ox = gid.x;
+    if (gid.x >= size.ow * size.c) { return; }
+    let c  = gid.x % size.c;
+    let ox = gid.x / size.c;
     let oy = gid.y;
-    let c  = gid.z;
-    if (ox >= size.ow || oy >= size.oh || c >= size.c) { return; }
     let ix = ox * 2u;
     let iy = oy * 2u;
-    let base = (((0u * size.h + iy) * size.w + ix) * size.c + c);
-    let srcIdx0 = base;
+    let base = ((iy * size.w + ix) * size.c + c);
     let srcIdx1 = base + size.c;
     let srcIdx2 = base + size.c * size.w;
     let srcIdx3 = srcIdx2 + size.c;
-    var m = src.data[srcIdx0];
-    if (src.data[srcIdx1] > m) { m = src.data[srcIdx1]; }
-    if (src.data[srcIdx2] > m) { m = src.data[srcIdx2]; }
-    if (src.data[srcIdx3] > m) { m = src.data[srcIdx3]; }
-    let dstIdx = (((0u * size.oh + oy) * size.ow + ox) * size.c + c);
-    dst.data[dstIdx] = m;
+    var m = src.data[base];
+    m = max(m, src.data[srcIdx1]);
+    m = max(m, src.data[srcIdx2]);
+    m = max(m, src.data[srcIdx3]);
+    dst.data[(oy * size.ow + ox) * size.c + c] = m;
   }
   )wgsl";
 
@@ -136,17 +236,15 @@ OIDN_NAMESPACE_BEGIN
   struct Size { n: u32, c: u32, h: u32, w: u32, };
   @group(0) @binding(2) var<uniform> size: Size;
 
-  @compute @workgroup_size(8, 8, 1)
+  @compute @workgroup_size(256, 1, 1)
   fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let ox = gid.x;
+    let ow = size.w * 2u;
+    if (gid.x >= ow * size.c) { return; }
+    let c  = gid.x % size.c;
+    let ox = gid.x / size.c;
     let oy = gid.y;
-    let c  = gid.z;
-    if (ox >= size.w*2u || oy >= size.h*2u || c >= size.c) { return; }
-    let ix = ox / 2u;
-    let iy = oy / 2u;
-    let srcIdx = (((0u * size.h + iy) * size.w + ix) * size.c + c);
-    let dstIdx = (((0u * (size.h*2u) + oy) * (size.w*2u) + ox) * size.c + c);
-    dst.data[dstIdx] = src.data[srcIdx];
+    let srcIdx = ((oy / 2u) * size.w + (ox / 2u)) * size.c + c;
+    dst.data[(oy * ow + ox) * size.c + c] = src.data[srcIdx];
   }
   )wgsl";
 
@@ -155,7 +253,17 @@ OIDN_NAMESPACE_BEGIN
 
   WebGPUEngine::~WebGPUEngine()
   {
+    if (pendingEncoder)   wgpuCommandEncoderRelease(pendingEncoder);
+    for (auto& entry : pipelineCache)
+    {
+      wgpuComputePipelineRelease(entry.second.pipeline);
+      wgpuPipelineLayoutRelease(entry.second.pipelineLayout);
+      wgpuBindGroupLayoutRelease(entry.second.bindGroupLayout);
+      wgpuShaderModuleRelease(entry.second.module);
+    }
     if (dummyBuf)         wgpuBufferRelease(dummyBuf);
+    if (convVec4Pipeline)     wgpuComputePipelineRelease(convVec4Pipeline);
+    if (convVec4ShaderModule) wgpuShaderModuleRelease(convVec4ShaderModule);
     if (pipeline)         wgpuComputePipelineRelease(pipeline);
     if (pipelineLayout)   wgpuPipelineLayoutRelease(pipelineLayout);
     if (bindGroupLayout)  wgpuBindGroupLayoutRelease(bindGroupLayout);
@@ -258,7 +366,7 @@ OIDN_NAMESPACE_BEGIN
 
   void WebGPUEngine::wait()
   {
-    device->sync();
+    sync();
   }
 
   void WebGPUEngine::initPipeline()
@@ -309,6 +417,28 @@ OIDN_NAMESPACE_BEGIN
     cpDesc.compute.constants = nullptr;
     cpDesc.label = { nullptr, 0 };
     pipeline = wgpuDeviceCreateComputePipeline(device->device, &cpDesc);
+
+    // Vectorized conv pipeline (same bind group layout)
+    WGPUShaderSourceWGSL sourceV{};
+    sourceV.chain.next = nullptr;
+    sourceV.chain.sType = WGPUSType_ShaderSourceWGSL;
+    sourceV.code = { kConv2dVec4WGSL, strlen(kConv2dVec4WGSL) };
+
+    WGPUShaderModuleDescriptor smDescV{};
+    smDescV.nextInChain = reinterpret_cast<const WGPUChainedStruct*>(&sourceV);
+    smDescV.label = { nullptr, 0 };
+    convVec4ShaderModule = wgpuDeviceCreateShaderModule(device->device, &smDescV);
+
+    WGPUComputePipelineDescriptor cpDescV{};
+    cpDescV.layout = pipelineLayout;
+    cpDescV.compute.module = convVec4ShaderModule;
+    cpDescV.compute.entryPoint = mainEntry;
+    cpDescV.compute.nextInChain = nullptr;
+    cpDescV.compute.constantCount = 0;
+    cpDescV.compute.constants = nullptr;
+    cpDescV.label = { nullptr, 0 };
+    convVec4Pipeline = wgpuDeviceCreateComputePipeline(device->device, &cpDescV);
+
   }
 
   void WebGPUEngine::initUpsamplePipeline()
@@ -616,6 +746,77 @@ OIDN_NAMESPACE_BEGIN
     return dummyBuf;
   }
 
+  WGPUCommandEncoder WebGPUEngine::getEncoder()
+  {
+    if (!pendingEncoder)
+      pendingEncoder = wgpuDeviceCreateCommandEncoder(device->device, nullptr);
+    return pendingEncoder;
+  }
+
+  void WebGPUEngine::flush()
+  {
+    if (!pendingEncoder)
+      return;
+    WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(pendingEncoder, nullptr);
+    wgpuCommandEncoderRelease(pendingEncoder);
+    pendingEncoder = nullptr;
+    device->submit(cmd);
+    wgpuCommandBufferRelease(cmd);
+  }
+
+  const WebGPUEngine::CachedPipeline& WebGPUEngine::getPipeline(
+    const char* code, std::initializer_list<WGPUBufferBindingType> bindingTypes)
+  {
+    auto it = pipelineCache.find(code);
+    if (it != pipelineCache.end())
+      return it->second;
+
+    CachedPipeline cp;
+
+    WGPUShaderSourceWGSL source{};
+    source.chain.next = nullptr;
+    source.chain.sType = WGPUSType_ShaderSourceWGSL;
+    source.code = { code, strlen(code) };
+    WGPUShaderModuleDescriptor smDesc{};
+    smDesc.nextInChain = reinterpret_cast<const WGPUChainedStruct*>(&source);
+    smDesc.label = { nullptr, 0 };
+    cp.module = wgpuDeviceCreateShaderModule(device->device, &smDesc);
+
+    std::vector<WGPUBindGroupLayoutEntry> entries(bindingTypes.size());
+    uint32_t i = 0;
+    for (WGPUBufferBindingType type : bindingTypes)
+    {
+      entries[i] = {};
+      entries[i].binding = i;
+      entries[i].visibility = WGPUShaderStage_Compute;
+      entries[i].buffer.type = type;
+      i++;
+    }
+
+    WGPUBindGroupLayoutDescriptor bglDesc{};
+    bglDesc.entryCount = entries.size();
+    bglDesc.entries = entries.data();
+    cp.bindGroupLayout = wgpuDeviceCreateBindGroupLayout(device->device, &bglDesc);
+
+    WGPUPipelineLayoutDescriptor plDesc{};
+    plDesc.bindGroupLayoutCount = 1;
+    plDesc.bindGroupLayouts = &cp.bindGroupLayout;
+    cp.pipelineLayout = wgpuDeviceCreatePipelineLayout(device->device, &plDesc);
+
+    WGPUComputePipelineDescriptor cpDesc{};
+    cpDesc.layout = cp.pipelineLayout;
+    cpDesc.compute.module = cp.module;
+    WGPUStringView mainEntry{ "main", WGPU_STRLEN };
+    cpDesc.compute.entryPoint = mainEntry;
+    cpDesc.compute.nextInChain = nullptr;
+    cpDesc.compute.constantCount = 0;
+    cpDesc.compute.constants = nullptr;
+    cpDesc.label = { nullptr, 0 };
+    cp.pipeline = wgpuDeviceCreateComputePipeline(device->device, &cpDesc);
+
+    return pipelineCache.emplace(code, cp).first->second;
+  }
+
   void WebGPUEngine::conv2d(const WebGPUTensor& src,
                             const WebGPUTensor& weight,
                             const WebGPUTensor& bias,
@@ -655,11 +856,15 @@ OIDN_NAMESPACE_BEGIN
     bgDesc.entries = entries;
     WGPUBindGroup bg = wgpuDeviceCreateBindGroup(device->device, &bgDesc);
 
-    WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(device->device, nullptr);
+    // The vectorized kernel requires the input channel count to be a multiple
+    // of 4 (which holds for all interior UNet layers)
+    const bool useVec4 = (src.c % 4 == 0);
+
+    WGPUCommandEncoder enc = getEncoder();
     WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(enc, nullptr);
-    wgpuComputePassEncoderSetPipeline(pass, pipeline);
+    wgpuComputePassEncoderSetPipeline(pass, useVec4 ? convVec4Pipeline : pipeline);
     wgpuComputePassEncoderSetBindGroup(pass, 0, bg, 0, nullptr);
-    wgpuComputePassEncoderDispatchWorkgroups(pass, (dst.w+7)/8, (dst.h+7)/8, dst.c);
+    wgpuComputePassEncoderDispatchWorkgroups(pass, (dst.w+7)/8, (dst.h+7)/8, (dst.c+3)/4);
     wgpuComputePassEncoderEnd(pass);
     wgpuComputePassEncoderRelease(pass);
 
@@ -672,10 +877,6 @@ OIDN_NAMESPACE_BEGIN
       readbacks.push_back({dst.buf, readback, outputHosts[dst.buf], outBytes});
     }
 
-    WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(enc, nullptr);
-    device->submit(cmd);
-    wgpuCommandBufferRelease(cmd);
-    wgpuCommandEncoderRelease(enc);
     wgpuBufferRelease(paramsBuf);
     wgpuBindGroupRelease(bg);
   }
@@ -707,11 +908,11 @@ OIDN_NAMESPACE_BEGIN
     bgDesc.entries = entries;
     WGPUBindGroup bg = wgpuDeviceCreateBindGroup(device->device, &bgDesc);
 
-    WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(device->device, nullptr);
+    WGPUCommandEncoder enc = getEncoder();
     WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(enc, nullptr);
     wgpuComputePassEncoderSetPipeline(pass, upsamplePipeline);
     wgpuComputePassEncoderSetBindGroup(pass, 0, bg, 0, nullptr);
-    wgpuComputePassEncoderDispatchWorkgroups(pass, (ow+7)/8, (oh+7)/8, src.c);
+    wgpuComputePassEncoderDispatchWorkgroups(pass, (ow*src.c+255)/256, oh, 1);
     wgpuComputePassEncoderEnd(pass);
     wgpuComputePassEncoderRelease(pass);
 
@@ -724,10 +925,6 @@ OIDN_NAMESPACE_BEGIN
       readbacks.push_back({dst.buf, readback, outputHosts[dst.buf], outBytes});
     }
 
-    WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(enc, nullptr);
-    device->submit(cmd);
-    wgpuCommandBufferRelease(cmd);
-    wgpuCommandEncoderRelease(enc);
     wgpuBufferRelease(sizeBuf);
     wgpuBindGroupRelease(bg);
   }
@@ -759,11 +956,11 @@ OIDN_NAMESPACE_BEGIN
     bgDesc.entries = entries;
     WGPUBindGroup bg = wgpuDeviceCreateBindGroup(device->device, &bgDesc);
 
-    WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(device->device, nullptr);
+    WGPUCommandEncoder enc = getEncoder();
     WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(enc, nullptr);
     wgpuComputePassEncoderSetPipeline(pass, poolPipeline);
     wgpuComputePassEncoderSetBindGroup(pass, 0, bg, 0, nullptr);
-    wgpuComputePassEncoderDispatchWorkgroups(pass, (ow+7)/8, (oh+7)/8, src.c);
+    wgpuComputePassEncoderDispatchWorkgroups(pass, (ow*src.c+255)/256, oh, 1);
     wgpuComputePassEncoderEnd(pass);
     wgpuComputePassEncoderRelease(pass);
 
@@ -776,36 +973,30 @@ OIDN_NAMESPACE_BEGIN
       readbacks.push_back({dst.buf, readback, outputHosts[dst.buf], outBytes});
     }
 
-    WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(enc, nullptr);
-    device->submit(cmd);
-    wgpuCommandBufferRelease(cmd);
-    wgpuCommandEncoderRelease(enc);
     wgpuBufferRelease(sizeBuf);
     wgpuBindGroupRelease(bg);
   }
 
-  static void dispatch1D(WebGPUDevice* dev, WGPUComputePipeline pipeline,
+  static void dispatch1D(WebGPUEngine* engine, WGPUComputePipeline pipeline,
                          WGPUBindGroupLayout layout,
                          WGPUBindGroupEntry* entries, int entryCount,
                          uint32_t size)
   {
+    auto* dev = static_cast<WebGPUDevice*>(engine->getDevice());
+
     WGPUBindGroupDescriptor bgDesc{};
     bgDesc.layout = layout;
     bgDesc.entryCount = entryCount;
     bgDesc.entries = entries;
     WGPUBindGroup bg = wgpuDeviceCreateBindGroup(dev->device, &bgDesc);
 
-    WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(dev->device, nullptr);
+    WGPUCommandEncoder enc = engine->getEncoder();
     WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(enc, nullptr);
     wgpuComputePassEncoderSetPipeline(pass, pipeline);
     wgpuComputePassEncoderSetBindGroup(pass, 0, bg, 0, nullptr);
     wgpuComputePassEncoderDispatchWorkgroups(pass, (size+63)/64, 1, 1);
     wgpuComputePassEncoderEnd(pass);
     wgpuComputePassEncoderRelease(pass);
-    WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(enc, nullptr);
-    dev->submit(cmd);
-    wgpuCommandBufferRelease(cmd);
-    wgpuCommandEncoderRelease(enc);
     wgpuBindGroupRelease(bg);
   }
 
@@ -823,17 +1014,12 @@ OIDN_NAMESPACE_BEGIN
     entries[1].binding = 1; entries[1].buffer = B.buf; entries[1].offset = B.offset; entries[1].size = size*sizeof(float);
     entries[2].binding = 2; entries[2].buffer = dst.buf; entries[2].offset = dst.offset; entries[2].size = size*sizeof(float);
     entries[3].binding = 3; entries[3].buffer = sizeBuf; entries[3].offset = 0; entries[3].size = sizeof(uint32_t);
-    dispatch1D(device, addPipeline, addBindGroupLayout, entries, 4, size);
+    dispatch1D(this, addPipeline, addBindGroupLayout, entries, 4, size);
     if (dst.type == WebGPUTensorType::Output)
     {
       WGPUBuffer readback = device->createBuffer(size*sizeof(float),
                           WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
-      WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(device->device, nullptr);
-      wgpuCommandEncoderCopyBufferToBuffer(enc, dst.buf, dst.offset, readback, 0, size*sizeof(float));
-      WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(enc, nullptr);
-      device->submit(cmd);
-      wgpuCommandBufferRelease(cmd);
-      wgpuCommandEncoderRelease(enc);
+      wgpuCommandEncoderCopyBufferToBuffer(getEncoder(), dst.buf, dst.offset, readback, 0, size*sizeof(float));
       readbacks.push_back({dst.buf, readback, outputHosts[dst.buf], size*sizeof(float)});
     }
     wgpuBufferRelease(sizeBuf);
@@ -853,17 +1039,12 @@ OIDN_NAMESPACE_BEGIN
     entries[1].binding = 1; entries[1].buffer = B.buf; entries[1].offset = B.offset; entries[1].size = size*sizeof(float);
     entries[2].binding = 2; entries[2].buffer = dst.buf; entries[2].offset = dst.offset; entries[2].size = size*sizeof(float);
     entries[3].binding = 3; entries[3].buffer = sizeBuf; entries[3].offset = 0; entries[3].size = sizeof(uint32_t);
-    dispatch1D(device, mulPipeline, mulBindGroupLayout, entries, 4, size);
+    dispatch1D(this, mulPipeline, mulBindGroupLayout, entries, 4, size);
     if (dst.type == WebGPUTensorType::Output)
     {
       WGPUBuffer readback = device->createBuffer(size*sizeof(float),
                           WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
-      WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(device->device, nullptr);
-      wgpuCommandEncoderCopyBufferToBuffer(enc, dst.buf, dst.offset, readback, 0, size*sizeof(float));
-      WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(enc, nullptr);
-      device->submit(cmd);
-      wgpuCommandBufferRelease(cmd);
-      wgpuCommandEncoderRelease(enc);
+      wgpuCommandEncoderCopyBufferToBuffer(getEncoder(), dst.buf, dst.offset, readback, 0, size*sizeof(float));
       readbacks.push_back({dst.buf, readback, outputHosts[dst.buf], size*sizeof(float)});
     }
     wgpuBufferRelease(sizeBuf);
@@ -881,17 +1062,12 @@ OIDN_NAMESPACE_BEGIN
     entries[0].binding = 0; entries[0].buffer = src.buf; entries[0].offset = src.offset; entries[0].size = size*sizeof(float);
     entries[1].binding = 1; entries[1].buffer = dst.buf; entries[1].offset = dst.offset; entries[1].size = size*sizeof(float);
     entries[2].binding = 2; entries[2].buffer = sizeBuf; entries[2].offset = 0; entries[2].size = sizeof(uint32_t);
-    dispatch1D(device, softplusPipeline, softplusBindGroupLayout, entries, 3, size);
+    dispatch1D(this, softplusPipeline, softplusBindGroupLayout, entries, 3, size);
     if (dst.type == WebGPUTensorType::Output)
     {
       WGPUBuffer readback = device->createBuffer(size*sizeof(float),
                           WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
-      WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(device->device, nullptr);
-      wgpuCommandEncoderCopyBufferToBuffer(enc, dst.buf, dst.offset, readback, 0, size*sizeof(float));
-      WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(enc, nullptr);
-      device->submit(cmd);
-      wgpuCommandBufferRelease(cmd);
-      wgpuCommandEncoderRelease(enc);
+      wgpuCommandEncoderCopyBufferToBuffer(getEncoder(), dst.buf, dst.offset, readback, 0, size*sizeof(float));
       readbacks.push_back({dst.buf, readback, outputHosts[dst.buf], size*sizeof(float)});
     }
     wgpuBufferRelease(sizeBuf);
@@ -899,6 +1075,7 @@ OIDN_NAMESPACE_BEGIN
 
   void WebGPUEngine::sync()
   {
+    flush();
     device->sync();
     for (auto& rb : readbacks)
     {

@@ -188,47 +188,10 @@ OIDN_NAMESPACE_BEGIN
                            WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst,
                            &params);
 
-    WGPUShaderSourceWGSL source{};
-    source.chain.next = nullptr;
-    source.chain.sType = WGPUSType_ShaderSourceWGSL;
-    source.code = { kWGSL, strlen(kWGSL) };
-    WGPUShaderModuleDescriptor smDesc{};
-    smDesc.nextInChain = reinterpret_cast<const WGPUChainedStruct*>(&source);
-    smDesc.label = { nullptr, 0 };
-    WGPUShaderModule shader = wgpuDeviceCreateShaderModule(dev->device, &smDesc);
-
-    WGPUBindGroupLayoutEntry entries[5] = {};
-    entries[0].binding = 0; entries[0].visibility = WGPUShaderStage_Compute;
-    entries[0].buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
-    entries[1].binding = 1; entries[1].visibility = WGPUShaderStage_Compute;
-    entries[1].buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
-    entries[2].binding = 2; entries[2].visibility = WGPUShaderStage_Compute;
-    entries[2].buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
-    entries[3].binding = 3; entries[3].visibility = WGPUShaderStage_Compute;
-    entries[3].buffer.type = WGPUBufferBindingType_Storage;
-    entries[4].binding = 4; entries[4].visibility = WGPUShaderStage_Compute;
-    entries[4].buffer.type = WGPUBufferBindingType_Uniform;
-
-    WGPUBindGroupLayoutDescriptor bglDesc{};
-    bglDesc.entryCount = 5;
-    bglDesc.entries = entries;
-    WGPUBindGroupLayout bgl = wgpuDeviceCreateBindGroupLayout(dev->device, &bglDesc);
-
-    WGPUPipelineLayoutDescriptor plDesc{};
-    plDesc.bindGroupLayoutCount = 1;
-    plDesc.bindGroupLayouts = &bgl;
-    WGPUPipelineLayout pipelineLayout = wgpuDeviceCreatePipelineLayout(dev->device, &plDesc);
-
-    WGPUComputePipelineDescriptor cpDesc{};
-    cpDesc.layout = pipelineLayout;
-    cpDesc.compute.module = shader;
-    WGPUStringView mainEntry{ "main", WGPU_STRLEN };
-    cpDesc.compute.entryPoint = mainEntry;
-    cpDesc.compute.nextInChain = nullptr;
-    cpDesc.compute.constantCount = 0;
-    cpDesc.compute.constants = nullptr;
-    cpDesc.label = { nullptr, 0 };
-    WGPUComputePipeline pipeline = wgpuDeviceCreateComputePipeline(dev->device, &cpDesc);
+    const auto& cp = engine->getPipeline(kWGSL,
+      {WGPUBufferBindingType_ReadOnlyStorage, WGPUBufferBindingType_ReadOnlyStorage,
+       WGPUBufferBindingType_ReadOnlyStorage, WGPUBufferBindingType_Storage,
+       WGPUBufferBindingType_Uniform});
 
     WGPUBindGroupEntry bgEntries[5] = {};
     bgEntries[0].binding = 0; bgEntries[0].buffer = srcAcc.getWGPUBuffer(); bgEntries[0].offset = srcAcc.getOffset(); bgEntries[0].size = srcSize;
@@ -241,29 +204,20 @@ OIDN_NAMESPACE_BEGIN
     bgEntries[3].binding = 3; bgEntries[3].buffer = dbuf->getWGPUBuffer(); bgEntries[3].offset = dbuf->getWGPUBufferOffset() + dst->getByteOffset(); bgEntries[3].size = size_t(C)*H*W*sizeof(float);
     bgEntries[4].binding = 4; bgEntries[4].buffer = paramsBuf; bgEntries[4].size = sizeof(Params);
     WGPUBindGroupDescriptor bgDesc{};
-    bgDesc.layout = bgl;
+    bgDesc.layout = cp.bindGroupLayout;
     bgDesc.entryCount = 5;
     bgDesc.entries = bgEntries;
     WGPUBindGroup bg = wgpuDeviceCreateBindGroup(dev->device, &bgDesc);
 
-    WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(dev->device, nullptr);
+    WGPUCommandEncoder enc = engine->getEncoder();
     WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(enc, nullptr);
-    wgpuComputePassEncoderSetPipeline(pass, pipeline);
+    wgpuComputePassEncoderSetPipeline(pass, cp.pipeline);
     wgpuComputePassEncoderSetBindGroup(pass, 0, bg, 0, nullptr);
     wgpuComputePassEncoderDispatchWorkgroups(pass, (W+7)/8, (H+7)/8, 1);
     wgpuComputePassEncoderEnd(pass);
     wgpuComputePassEncoderRelease(pass);
 
-    WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(enc, nullptr);
-    dev->submit(cmd);
-    wgpuCommandBufferRelease(cmd);
-    wgpuCommandEncoderRelease(enc);
-
     wgpuBindGroupRelease(bg);
-    wgpuPipelineLayoutRelease(pipelineLayout);
-    wgpuBindGroupLayoutRelease(bgl);
-    wgpuComputePipelineRelease(pipeline);
-    wgpuShaderModuleRelease(shader);
     wgpuBufferRelease(paramsBuf);
   }
 
