@@ -145,6 +145,11 @@ install(DIRECTORY include/OpenImageDenoise
   COMPONENT devel
   PATTERN "*.in" EXCLUDE
 )
+# config.h is generated into the build tree
+install(FILES ${PROJECT_BINARY_DIR}/include/OpenImageDenoise/config.h
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/OpenImageDenoise
+  COMPONENT devel
+)
 
 # Install documentation
 install(

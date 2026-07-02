@@ -16,6 +16,10 @@ OIDN_NAMESPACE_BEGIN
     void submit(WGPUCommandBuffer cmdBuf);
     void sync();
 
+    // Blocks until the future completes (web builds only; no-op on native,
+    // where the blocking polls in sync() are used instead)
+    void waitFuture(WGPUFuture future);
+
     WGPUBuffer createBuffer(size_t byteSize, WGPUBufferUsage usage,
                             const void* initData = nullptr);
 

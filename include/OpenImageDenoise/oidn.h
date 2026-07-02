@@ -7,7 +7,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "config.h"
+// Qualified path so the generated config.h is found via the include dirs when
+// building in-tree (it is generated into the build tree); for installed
+// headers it resolves to the sibling file as before.
+#include "OpenImageDenoise/config.h"
 
 #if defined(__cplusplus)
   #if defined(SYCL_LANGUAGE_VERSION)

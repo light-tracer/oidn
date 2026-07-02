@@ -13,6 +13,11 @@ OIDN_NAMESPACE_BEGIN
 
   ModuleLoader::ModuleLoader()
   {
+  #if defined(__EMSCRIPTEN__)
+    // In the web build every device module is statically linked, so there is
+    // no module file to locate (and no /proc/self/maps to parse).
+    return;
+  #else
     // Get the path of the current module
     const Path path = getModulePath();
 
@@ -21,6 +26,7 @@ OIDN_NAMESPACE_BEGIN
     if (lastPathSep == Path::npos)
       throw std::runtime_error("could not get absolute path of module directory");
     modulePathPrefix = path.substr(0, lastPathSep + 1);
+  #endif
   }
 
   bool ModuleLoader::load(const std::string& name)

@@ -1,10 +1,12 @@
 ## Copyright 2018 Intel Corporation
 ## SPDX-License-Identifier: Apache-2.0
 
-# Generate config.h
+# Generate config.h into the build tree, so multiple build directories with
+# different options (e.g. a native and an Emscripten build) don't fight over
+# a single file in the source tree
 configure_file(
   "${PROJECT_SOURCE_DIR}/include/OpenImageDenoise/config.h.in"
-  "${PROJECT_SOURCE_DIR}/include/OpenImageDenoise/config.h"
+  "${PROJECT_BINARY_DIR}/include/OpenImageDenoise/config.h"
 )
 
 # Generate list of symbols to export
@@ -18,7 +20,7 @@ configure_file(
 )
 
 add_library(OpenImageDenoise_common OBJECT
-  ${PROJECT_SOURCE_DIR}/include/OpenImageDenoise/config.h
+  ${PROJECT_BINARY_DIR}/include/OpenImageDenoise/config.h
   ${PROJECT_SOURCE_DIR}/include/OpenImageDenoise/oidn.h
   ${PROJECT_SOURCE_DIR}/include/OpenImageDenoise/oidn.hpp
   common.h
@@ -36,6 +38,7 @@ set_target_properties(OpenImageDenoise_common PROPERTIES OUTPUT_NAME ${OIDN_LIBR
 
 target_include_directories(OpenImageDenoise_common
   PUBLIC
+    $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/external>
     $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>

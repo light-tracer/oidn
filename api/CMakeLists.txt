@@ -20,6 +20,7 @@ endif()
 
 target_include_directories(OpenImageDenoise
   PUBLIC
+    $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include> # generated config.h
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )

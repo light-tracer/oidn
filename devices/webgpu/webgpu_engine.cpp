@@ -1086,13 +1086,18 @@ OIDN_NAMESPACE_BEGIN
         *d = (status == WGPUMapAsyncStatus_Success);
       };
       WGPUBufferMapCallbackInfo cbInfo{};
-      cbInfo.mode = WGPUCallbackMode_AllowProcessEvents;
       cbInfo.callback = callback;
       cbInfo.userdata1 = &done;
+    #if defined(__EMSCRIPTEN__)
+      cbInfo.mode = WGPUCallbackMode_WaitAnyOnly;
+      device->waitFuture(wgpuBufferMapAsync(rb.readback, WGPUMapMode_Read, 0, rb.size, cbInfo));
+    #else
+      cbInfo.mode = WGPUCallbackMode_AllowProcessEvents;
       wgpuBufferMapAsync(rb.readback, WGPUMapMode_Read, 0, rb.size, cbInfo);
       while (!done)
         device->sync();
-      std::memcpy(rb.host, wgpuBufferGetMappedRange(rb.readback,0,rb.size), rb.size);
+    #endif
+      std::memcpy(rb.host, wgpuBufferGetConstMappedRange(rb.readback,0,rb.size), rb.size);
       wgpuBufferUnmap(rb.readback);
       wgpuBufferRelease(rb.readback);
     }

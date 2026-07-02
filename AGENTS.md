@@ -185,5 +185,63 @@ P0      Element-wise kernels    **Done** – WGSL implementations of add, mul, a
 P1      Memory allocator        **Done** – buffers share memory through WebGPUArena/WebGPUHeap.
 P1	Full denoiser	**Done** – oidnDenoise runs the RT filter on WebGPU, matching CPU output (RMSE ~1e-6).
 P1	Performance	**Done (first pass)** – 512×512 HDR denoise: 1.16 s → 21 ms steady-state on an RTX 3060 (vs 63 ms on the 20-thread CPU backend). What worked, in order of impact: (1) whole graph recorded into ONE command buffer via WebGPUEngine::getEncoder()/flush() — per-op wgpuQueueSubmit was ~7 ms each, by far the dominant cost; buffer read/write and sync() flush automatically to keep queue ordering; (2) OHWI weight layout + vec4 conv kernel computing 4 output channels per thread (5x on conv time); (3) channel-innermost (coalesced) pool/upsample kernels; (4) pipeline cache (WebGPUEngine::getPipeline) so IO ops stop recompiling WGSL every submit. What did NOT work (tried and reverted): 2x2 pixel register blocking in conv (breaks x-coalescing, register pressure), 16x8 workgroups (8x8 is better). Next levers if needed: shared-memory tiled conv (conv is at ~250 GFLOP/s, ~2% of peak), fused conv post-ops (kernel implements them; isConvSupported still reports None), f16 weights/tensors.
-P2	Web/Emscripten build	Nothing exists yet: cmake fetches native wgpu-native binaries (linux/macos/windows). A web build needs emdawnwebgpu/Emscripten plumbing and an async entry point (no blocking waits on the web).
+P2	Web/Emscripten build	**Done (first version, 2026-07)** – see "Web build" section below.
 P2	Robustness	Image row strides are assumed packed float3; tiling >1 tile untested on WebGPU; WebGPU.Eltwise still skipped (non-determinism seen on Lavapipe only).
+
+## Web build (Emscripten + browser WebGPU) ✅
+
+The denoiser runs in the browser: wasm module (~1 MB, no embedded weights) +
+JS wrapper + test page. Weights (.tza, ~1.8 MB each) are fetched at runtime and
+passed via `oidnWebSetWeights`.
+
+### Building
+emsdk lives in `D:\projects\emsdk` (any recent emsdk works; tested 6.0.2):
+```
+call D:\projects\emsdk\emsdk_env.bat
+emcmake cmake -B build-web -G Ninja -DCMAKE_BUILD_TYPE=Release ^
+  -DOIDN_STATIC_LIB=ON -DOIDN_DEVICE_WEBGPU=ON -DOIDN_DEVICE_CPU=OFF ^
+  -DOIDN_APPS=OFF -DOIDN_LIBRARY_VERSIONED=OFF ^
+  -DOIDN_FILTER_RT=OFF -DOIDN_FILTER_RTLIGHTMAP=OFF .
+cmake --build build-web -j
+```
+Outputs in `build-web/web/`: `oidn_web.js`, `oidn_web.wasm`, `index.html`,
+`denoise.js`, `weights/*.tza`. Serve with `python web/serve.py 8778 --directory
+build-web/web` (no-cache — IMPORTANT during development, the browser otherwise
+mixes cached js with fresh wasm and you get bogus LinkErrors).
+
+Note `config.h` is now generated into each build dir (not the source tree), so
+native and web builds with different options no longer clobber each other.
+
+### JS API (web/oidn_web.cpp)
+`oidnWebInit()` (async, creates the WebGPU device), `oidnWebSetWeights(ptr,
+size)`, `oidnWebDenoise(w, h, colorPtr, albedoPtr, normalPtr, outPtr, hdr)`
+(async; float3 RGB in the wasm heap), `oidnWebShutdown()`. The filter and
+buffers are cached across calls with identical settings, so only the first
+denoise pays the weights parse/reorder/upload.
+
+### Web-specific pitfalls (hard-won, do not regress)
+- emdawnwebgpu (Dawn) is stricter than wgpu-native: use
+  `wgpuBufferGetConstMappedRange` for read-mapped buffers (GetMappedRange
+  returns null + validation error → silently black output via memcpy from
+  heap address 0); WGSL float literals must fit f32 exactly (3.4028235e38 is
+  rejected by Tint; use 3.4e38).
+- Block on async work with WGPUFutures + `wgpuInstanceWaitAny` (requires
+  `WGPUInstanceFeatureName_TimedWaitAny` at instance creation and Asyncify).
+  Do NOT poll with emscripten_sleep: browsers throttle timers in background
+  tabs to ~1 s per tick, which made each denoise take multiple seconds.
+- Needs `-fexceptions` (whole build), `-sASYNCIFY`, `-sSTACK_SIZE=1048576`
+  (deep call chains overflow the 64 KB default), `-sALLOW_MEMORY_GROWTH`.
+- `ModuleLoader` must not try to locate module files on the web (static build,
+  no /proc/self/maps) — guarded in core/module.cpp.
+- `OIDN_TIME_OPS=1` per-op timing currently aborts on the web (per-op flush +
+  wait path trips an assertion) — use it natively; the web shim prints
+  upload/execute/readback phase timings to the console instead.
+
+### Performance (2026-07, RTX 3060)
+Steady-state 512×512 LDR denoise from the test page in an occluded automated
+tab: ~400 ms total, of which upload ~4 ms, execute (CPU-side record+submit)
+~4 ms, and ~300 ms waiting on the output readback future (this floor is the
+browser's GPU-process scheduling for hidden tabs; the pure GPU time measured
+~70-85 ms — expect foreground tabs to be much closer to that). Native
+comparison: 21 ms. First run adds weights fetch + filter commit (~1-1.5 s;
+weights reorder runs in single-threaded wasm).

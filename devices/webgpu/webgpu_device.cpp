@@ -4,9 +4,7 @@
 #include <cstring>
 #include <iostream>
 
-#if defined(__EMSCRIPTEN__)
-  #include <emscripten.h>
-#else
+#if !defined(__EMSCRIPTEN__)
   // wgpu-native extension header (wgpuDevicePoll, wgpuSetLogCallback, ...);
   // not available in the browser (emdawnwebgpu) build
   #include <webgpu/wgpu.h>
@@ -53,17 +51,6 @@ OIDN_NAMESPACE_BEGIN
   }
 #endif
 
-  // Advance async work. On native this just drains the instance event queue; on
-  // the web it also yields to the browser event loop (via Asyncify) so pending
-  // promises can resolve.
-  static void pumpEvents(WGPUInstance instance)
-  {
-  #if defined(__EMSCRIPTEN__)
-    emscripten_sleep(1);
-  #endif
-    wgpuInstanceProcessEvents(instance);
-  }
-
   WebGPUDevice::WebGPUDevice() {}
 
   WebGPUDevice::~WebGPUDevice()
@@ -76,19 +63,38 @@ OIDN_NAMESPACE_BEGIN
 
   void WebGPUDevice::init()
   {
+  #if defined(__EMSCRIPTEN__)
+    // The web build blocks on async operations with wgpuInstanceWaitAny
+    // (awaiting the underlying promise via Asyncify), which must be enabled at
+    // instance creation. Polling with timers instead would be subject to the
+    // browser throttling timers in background tabs (up to ~1 s per tick).
+    WGPUInstanceDescriptor instDesc{};
+    static const WGPUInstanceFeatureName timedWaitAny = WGPUInstanceFeatureName_TimedWaitAny;
+    instDesc.requiredFeatureCount = 1;
+    instDesc.requiredFeatures = &timedWaitAny;
+    instance = wgpuCreateInstance(&instDesc);
+  #else
     instance = wgpuCreateInstance(nullptr);
+  #endif
     if (!instance)
       throw std::runtime_error("failed to create WebGPU instance");
 
     WGPURequestAdapterOptions opts{};
     opts.powerPreference = WGPUPowerPreference_HighPerformance;
     WGPURequestAdapterCallbackInfo adapterCb{};
-    adapterCb.mode = WGPUCallbackMode_AllowProcessEvents;
     adapterCb.callback = handle_request_adapter;
     adapterCb.userdata1 = &adapter;
+  #if defined(__EMSCRIPTEN__)
+    adapterCb.mode = WGPUCallbackMode_WaitAnyOnly;
+    waitFuture(wgpuInstanceRequestAdapter(instance, &opts, adapterCb));
+  #else
+    adapterCb.mode = WGPUCallbackMode_AllowProcessEvents;
     wgpuInstanceRequestAdapter(instance, &opts, adapterCb);
     while (!adapter)
-      pumpEvents(instance);
+      wgpuInstanceProcessEvents(instance);
+  #endif
+    if (!adapter)
+      throw std::runtime_error("failed to get WebGPU adapter");
 
     if (isVerbose())
     {
@@ -114,12 +120,19 @@ OIDN_NAMESPACE_BEGIN
     devDesc.uncapturedErrorCallbackInfo.callback = handle_uncaptured_error;
 
     WGPURequestDeviceCallbackInfo deviceCb{};
-    deviceCb.mode = WGPUCallbackMode_AllowProcessEvents;
     deviceCb.callback = handle_request_device;
     deviceCb.userdata1 = &device;
+  #if defined(__EMSCRIPTEN__)
+    deviceCb.mode = WGPUCallbackMode_WaitAnyOnly;
+    waitFuture(wgpuAdapterRequestDevice(adapter, &devDesc, deviceCb));
+  #else
+    deviceCb.mode = WGPUCallbackMode_AllowProcessEvents;
     wgpuAdapterRequestDevice(adapter, &devDesc, deviceCb);
     while (!device)
-      pumpEvents(instance);
+      wgpuInstanceProcessEvents(instance);
+  #endif
+    if (!device)
+      throw std::runtime_error("failed to get WebGPU device");
 
     queue = wgpuDeviceGetQueue(device);
 
@@ -142,12 +155,26 @@ OIDN_NAMESPACE_BEGIN
   void WebGPUDevice::sync()
   {
   #if defined(__EMSCRIPTEN__)
-    // There is no blocking device poll in the browser; yield to the event loop
-    // (via Asyncify) so the queue drains and pending map callbacks fire
-    emscripten_sleep(1);
-    wgpuInstanceProcessEvents(instance);
+    // There is no blocking device poll in the browser: wait on a queue
+    // work-done future instead (awaits the promise via Asyncify)
+    WGPUQueueWorkDoneCallbackInfo cb{};
+    cb.mode = WGPUCallbackMode_WaitAnyOnly;
+    cb.callback = [](WGPUQueueWorkDoneStatus, WGPUStringView, void*, void*) {};
+    waitFuture(wgpuQueueOnSubmittedWorkDone(queue, cb));
   #else
     wgpuDevicePoll(device, true, nullptr);
+  #endif
+  }
+
+  void WebGPUDevice::waitFuture(WGPUFuture future)
+  {
+  #if defined(__EMSCRIPTEN__)
+    WGPUFutureWaitInfo info{};
+    info.future = future;
+    wgpuInstanceWaitAny(instance, 1, &info, UINT64_MAX);
+  #else
+    // Native code uses blocking polls instead (see sync())
+    (void)future;
   #endif
   }
 

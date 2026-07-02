@@ -90,7 +90,7 @@ OIDN_NAMESPACE_BEGIN
     var value = vec3<f32>(src.data[base],
                           select(src.data[base], src.data[base+1u], params.srcC > 1u),
                           select(src.data[base], src.data[base+2u], params.srcC > 2u));
-    value = sanitize(value, 0.0, 3.4028235e38);
+    value = sanitize(value, 0.0, 3.4e38);
     value = tf_inverse(value);
     if (params.dstC == 1u) {
       let m = (value.x + value.y + value.z) / 3.0;

@@ -87,13 +87,22 @@ OIDN_NAMESPACE_BEGIN
       *d = (status == WGPUMapAsyncStatus_Success);
     };
     WGPUBufferMapCallbackInfo cbInfo{};
-    cbInfo.mode = WGPUCallbackMode_AllowProcessEvents;
     cbInfo.callback = callback;
     cbInfo.userdata1 = &done;
+  #if defined(__EMSCRIPTEN__)
+    cbInfo.mode = WGPUCallbackMode_WaitAnyOnly;
+    dev->waitFuture(wgpuBufferMapAsync(readback, WGPUMapMode_Read, 0, byteSize, cbInfo));
+  #else
+    cbInfo.mode = WGPUCallbackMode_AllowProcessEvents;
     wgpuBufferMapAsync(readback, WGPUMapMode_Read, 0, byteSize, cbInfo);
     while (!done)
       dev->sync();
-    std::memcpy(dstHostPtr, wgpuBufferGetMappedRange(readback,0,byteSize), byteSize);
+  #endif
+    if (!done)
+      throw std::runtime_error("failed to map WebGPU readback buffer");
+    // Note: must be the const variant; GetMappedRange fails on read-mapped
+    // buffers in Dawn/emdawnwebgpu
+    std::memcpy(dstHostPtr, wgpuBufferGetConstMappedRange(readback,0,byteSize), byteSize);
     wgpuBufferUnmap(readback);
     wgpuBufferRelease(readback);
   }

@@ -4,9 +4,10 @@
 // Driver for the OIDN WebGPU wasm module. Loads an image (or a synthetic noisy
 // sample), runs the RT filter on the GPU, and shows before/after.
 
-let Module = null;      // the Emscripten module instance
-let inited = false;     // whether the WebGPU device is created
-let curImage = null;    // { width, height, rgba: Uint8ClampedArray } of the noisy input
+let Module = null;         // the Emscripten module instance
+let inited = false;        // whether the WebGPU device is created
+let curImage = null;       // { width, height, rgba: Uint8ClampedArray } of the noisy input
+let curWeightsUrl = null;  // weights blob currently loaded into the module
 
 const $ = (id) => document.getElementById(id);
 const statusEl = $('status');
@@ -90,6 +91,22 @@ async function loadFile(file) {
   setInput({ width: w, height: h, rgba: new Uint8ClampedArray(rgba) });
 }
 
+// Fetch a .tza weights blob and hand it to the wasm module (cached per URL)
+async function ensureWeights(url) {
+  if (curWeightsUrl === url) return true;
+  setStatus('loading weights ' + url + '…');
+  const resp = await fetch(url);
+  if (!resp.ok) { setStatus('failed to fetch ' + url); return false; }
+  const bytes = new Uint8Array(await resp.arrayBuffer());
+  const ptr = Module._malloc(bytes.length);
+  Module.HEAPU8.set(bytes, ptr);
+  const ok = Module.ccall('oidnWebSetWeights', 'number', ['number', 'number'], [ptr, bytes.length]);
+  Module._free(ptr);
+  if (!ok) { setStatus('failed to set weights'); return false; }
+  curWeightsUrl = url;
+  return true;
+}
+
 async function denoise() {
   if (!Module || !curImage) return;
   const btn = $('denoise');
@@ -103,8 +120,14 @@ async function denoise() {
       inited = true;
     }
 
+    const wantHdr = $('hdr').checked;
+    if (!await ensureWeights(wantHdr ? 'weights/rt_hdr.tza' : 'weights/rt_ldr.tza')) {
+      btn.disabled = false;
+      return;
+    }
+
     const { width, height, rgba } = curImage;
-    const hdr = $('hdr').checked ? 1 : 0;
+    const hdr = wantHdr ? 1 : 0;
     const n = width * height;
     const floats = new Float32Array(n * 3);
     // sRGB bytes -> linear float RGB
@@ -159,7 +182,17 @@ $('file').addEventListener('change', (e) => { if (e.target.files[0]) loadFile(e.
 $('denoise').addEventListener('click', denoise);
 
 // --- load the wasm module ---
-createOIDN().then((m) => {
+// Debug helpers: add ?timeops=1 and/or ?oidnverbose=2 to the URL to enable
+// OIDN's per-op timing / verbose logging inside the wasm module
+const urlParams = new URLSearchParams(location.search);
+const moduleArg = {
+  preRun: [(m) => {
+    if (urlParams.get('timeops')) m.ENV.OIDN_TIME_OPS = '1';
+    if (urlParams.get('oidnverbose')) m.ENV.OIDN_VERBOSE = urlParams.get('oidnverbose');
+  }],
+};
+
+createOIDN(moduleArg).then((m) => {
   Module = m;
   setStatus('ready — generate a sample or load an image');
   setInput(makeSample(512, 512));

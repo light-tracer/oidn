@@ -98,7 +98,7 @@ OIDN_NAMESPACE_BEGIN
         inputImg.data[imgIdx+2u]);
     value = value * params.inputScale;
     let minV = select(0.0, -1.0, params.snormFlag != 0u);
-    let maxV = select(1.0, 3.4028235e38, params.hdr != 0u);
+    let maxV = select(1.0, 3.4e38, params.hdr != 0u);
     value = sanitize(value, minV, maxV);
     if (params.snormFlag != 0u) {
       value = value * 0.5 + vec3<f32>(0.5);

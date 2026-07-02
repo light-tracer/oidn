@@ -292,6 +292,12 @@ endif()
 ## Set flags
 ## -------------------------------------------------------------------------------------------------
 
+# The library relies on C++ exceptions for API error handling; Emscripten
+# disables exception catching by default, so enable it across the whole build.
+if(EMSCRIPTEN)
+  append(OIDN_CXX_FLAGS "-fexceptions")
+endif()
+
 append(CMAKE_C_FLAGS   "${OIDN_C_CXX_FLAGS}")
 append(CMAKE_CXX_FLAGS "${OIDN_C_CXX_FLAGS} ${OIDN_CXX_FLAGS}")
 

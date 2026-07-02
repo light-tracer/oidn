@@ -62,10 +62,32 @@ WebGPU backend is ~3× faster on this machine as of the last measurement.
 - **1×1 conv fast path.** The 1×1 convs (none in the default RT UNet, but used
   by some models) degenerate to a matmul and could use a wider tiling.
 
-## Profiling aids (both work on any backend)
+## Web build (Emscripten, browser WebGPU via emdawnwebgpu)
+
+512×512 LDR, RTX 3060, filter cached (see web/oidn_web.cpp), occluded
+automated tab: ~400 ms/denoise — upload ~4 ms, execute (record+submit) ~4 ms,
+~300 ms waiting on the output readback future. The wait is dominated by the
+browser's GPU-process scheduling for hidden tabs; measured pure GPU time was
+~70-85 ms, so foreground tabs should be much faster. What mattered:
+
+- **Future-based waits** (`wgpuInstanceWaitAny` + Asyncify) instead of
+  `emscripten_sleep` polling. Timer polling was throttled to ~1 s/tick in
+  background tabs → ~2 s per denoise (~5× slower).
+- **Filter caching in the shim** — recommitting per call re-parses and
+  re-reorders the weights in single-threaded wasm (~1 s).
+- `executeAsync` + blocking readback (one GPU round trip instead of two).
+
+Remaining web levers: the ~300 ms hidden-tab readback floor (consider
+requestAnimationFrame-aligned denoising or accepting it), the JS float3
+conversion (~70 ms, could move into wasm or a shader), and everything in the
+native list above (the GPU work itself is the same shaders).
+
+## Profiling aids
 
 - `OIDN_TIME_OPS=1` — prints wall-clock per op in `Graph::submit` (forces a
-  device sync per op, so totals are pessimistic on GPU).
+  device sync per op, so totals are pessimistic on GPU). Native only: on the
+  web this path currently aborts; the web shim prints upload/execute/readback
+  phase timings to the console instead.
 - `OIDN_DUMP_OPS=1` — prints per-op output tensor stats (mean/min/max/nan).
   Invaluable for locating a divergent layer when comparing against the CPU
   backend.

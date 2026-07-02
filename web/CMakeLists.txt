@@ -14,15 +14,19 @@ target_link_libraries(oidn_web PRIVATE OpenImageDenoise)
 
 # Exported C functions callable from JS (leading underscore is the wasm symbol)
 set(OIDN_WEB_EXPORTS
-  "_oidnWebInit,_oidnWebDenoise,_oidnWebShutdown,_malloc,_free")
+  "_oidnWebInit,_oidnWebSetWeights,_oidnWebDenoise,_oidnWebShutdown,_malloc,_free")
 
 target_link_options(oidn_web PRIVATE
   # WebGPU from the browser
   "--use-port=emdawnwebgpu"
+  # Match the -fexceptions the library is compiled with
+  "-fexceptions"
   # Let the synchronous C API block on async WebGPU (adapter/device request,
   # buffer maps) by unwinding to the browser event loop and resuming
   "-sASYNCIFY"
-  "-sASYNCIFY_STACK_SIZE=16384"
+  "-sASYNCIFY_STACK_SIZE=131072"
+  # OIDN's filter execution has deep call chains; the 64 KB default is too small
+  "-sSTACK_SIZE=1048576"
   # The denoiser allocates sizeable GPU staging/host buffers on demand
   "-sALLOW_MEMORY_GROWTH=1"
   "-sINITIAL_MEMORY=134217728"
@@ -30,7 +34,7 @@ target_link_options(oidn_web PRIVATE
   "-sMODULARIZE=1"
   "-sEXPORT_NAME=createOIDN"
   "-sEXPORTED_FUNCTIONS=${OIDN_WEB_EXPORTS}"
-  "-sEXPORTED_RUNTIME_METHODS=ccall,cwrap,HEAPF32"
+  "-sEXPORTED_RUNTIME_METHODS=ccall,cwrap,HEAPF32,HEAPU8,ENV"
   "-sENVIRONMENT=web"
   # Fail loudly instead of silently corrupting on OOB during bring-up
   "-sASSERTIONS=1"
@@ -46,3 +50,16 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/index.html
                ${CMAKE_CURRENT_BINARY_DIR}/index.html COPYONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/denoise.js
                ${CMAKE_CURRENT_BINARY_DIR}/denoise.js COPYONLY)
+
+# The wasm module ships without embedded weights; the page fetches these .tza
+# files at runtime and passes them to oidnWebSetWeights
+set(OIDN_WEB_WEIGHTS
+  rt_ldr.tza
+  rt_hdr.tza
+  rt_ldr_alb_nrm.tza
+  rt_hdr_alb_nrm.tza
+)
+foreach(_tza ${OIDN_WEB_WEIGHTS})
+  configure_file(${PROJECT_SOURCE_DIR}/weights/${_tza}
+                 ${CMAKE_CURRENT_BINARY_DIR}/weights/${_tza} COPYONLY)
+endforeach()
