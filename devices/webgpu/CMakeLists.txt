@@ -15,6 +15,18 @@ set(OIDN_WEBGPU_SOURCES
   webgpu_module.cpp
   webgpu_helper.cpp)
 
+if(EMSCRIPTEN)
+  # On the web, WebGPU comes from the browser via Emscripten's emdawnwebgpu
+  # port. Expose it through the same `wgpu_native` target name the rest of the
+  # build links against, carrying the port flag as compile + link options.
+  add_library(wgpu_native INTERFACE)
+  target_compile_options(wgpu_native INTERFACE "--use-port=emdawnwebgpu")
+  target_link_options(wgpu_native INTERFACE "--use-port=emdawnwebgpu")
+  # It is a link dependency of the exported device target, so it must belong to
+  # the export set as well
+  install(TARGETS wgpu_native EXPORT OpenImageDenoise_Exports)
+endif()
+
 add_library(OpenImageDenoise_device_webgpu ${OIDN_LIB_TYPE} ${OIDN_WEBGPU_SOURCES} ${OIDN_RESOURCE_FILE})
 
 set_target_properties(OpenImageDenoise_device_webgpu PROPERTIES

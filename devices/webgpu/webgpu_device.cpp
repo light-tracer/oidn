@@ -3,7 +3,14 @@
 #include "core/context.h"
 #include <cstring>
 #include <iostream>
-#include <webgpu/wgpu.h>
+
+#if defined(__EMSCRIPTEN__)
+  #include <emscripten.h>
+#else
+  // wgpu-native extension header (wgpuDevicePoll, wgpuSetLogCallback, ...);
+  // not available in the browser (emdawnwebgpu) build
+  #include <webgpu/wgpu.h>
+#endif
 
 OIDN_NAMESPACE_BEGIN
 
@@ -37,11 +44,24 @@ OIDN_NAMESPACE_BEGIN
     fflush(stderr);
   }
 
+#if !defined(__EMSCRIPTEN__)
   static void handle_log(WGPULogLevel level, WGPUStringView message, void*)
   {
     fprintf(stderr, "wgpu log (%d): %.*s\n", (int)level,
             (int)message.length, message.data);
     fflush(stderr);
+  }
+#endif
+
+  // Advance async work. On native this just drains the instance event queue; on
+  // the web it also yields to the browser event loop (via Asyncify) so pending
+  // promises can resolve.
+  static void pumpEvents(WGPUInstance instance)
+  {
+  #if defined(__EMSCRIPTEN__)
+    emscripten_sleep(1);
+  #endif
+    wgpuInstanceProcessEvents(instance);
   }
 
   WebGPUDevice::WebGPUDevice() {}
@@ -68,7 +88,7 @@ OIDN_NAMESPACE_BEGIN
     adapterCb.userdata1 = &adapter;
     wgpuInstanceRequestAdapter(instance, &opts, adapterCb);
     while (!adapter)
-      wgpuInstanceProcessEvents(instance);
+      pumpEvents(instance);
 
     if (isVerbose())
     {
@@ -82,11 +102,13 @@ OIDN_NAMESPACE_BEGIN
       }
     }
 
+  #if !defined(__EMSCRIPTEN__)
     if (isVerbose(2))
     {
       wgpuSetLogCallback(handle_log, nullptr);
       wgpuSetLogLevel(WGPULogLevel_Warn);
     }
+  #endif
 
     WGPUDeviceDescriptor devDesc{};
     devDesc.uncapturedErrorCallbackInfo.callback = handle_uncaptured_error;
@@ -97,7 +119,7 @@ OIDN_NAMESPACE_BEGIN
     deviceCb.userdata1 = &device;
     wgpuAdapterRequestDevice(adapter, &devDesc, deviceCb);
     while (!device)
-      wgpuInstanceProcessEvents(instance);
+      pumpEvents(instance);
 
     queue = wgpuDeviceGetQueue(device);
 
@@ -119,7 +141,14 @@ OIDN_NAMESPACE_BEGIN
 
   void WebGPUDevice::sync()
   {
+  #if defined(__EMSCRIPTEN__)
+    // There is no blocking device poll in the browser; yield to the event loop
+    // (via Asyncify) so the queue drains and pending map callbacks fire
+    emscripten_sleep(1);
+    wgpuInstanceProcessEvents(instance);
+  #else
     wgpuDevicePoll(device, true, nullptr);
+  #endif
   }
 
   WGPUBuffer WebGPUDevice::createBuffer(size_t byteSize, WGPUBufferUsage usage,

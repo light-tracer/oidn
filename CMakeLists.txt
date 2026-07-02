@@ -97,7 +97,10 @@ endif()
 ## Libraries
 ## -----------------------------------------------------------------------------
 
-if(OIDN_DEVICE_WEBGPU)
+if(OIDN_DEVICE_WEBGPU AND NOT EMSCRIPTEN)
+  # Native builds download a prebuilt wgpu-native. The Emscripten/web build
+  # gets WebGPU from the browser via the emdawnwebgpu port instead (wired up
+  # in devices/webgpu/CMakeLists.txt).
   add_subdirectory(external/webgpu)
 endif()
 
@@ -116,6 +119,12 @@ endif()
 export(EXPORT OpenImageDenoise_Exports
   FILE ${OIDN_BUILD_TREE_EXPORT_FILE}
 )
+
+# Emscripten/WebAssembly build: a small wasm module + JS wrapper for running
+# the denoiser in a browser via WebGPU.
+if(EMSCRIPTEN)
+  add_subdirectory(web)
+endif()
 
 ## -----------------------------------------------------------------------------
 ## Apps

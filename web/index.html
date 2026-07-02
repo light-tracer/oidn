@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<!-- Copyright 2026 Intel Corporation / SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open Image Denoise — WebGPU (browser)</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; font: 14px/1.5 system-ui, sans-serif; background: #14161a; color: #e6e8ec; }
+  header { padding: 16px 20px; border-bottom: 1px solid #2a2e35; }
+  h1 { margin: 0; font-size: 18px; }
+  header .sub { color: #99a; font-size: 12px; margin-top: 2px; }
+  main { padding: 20px; max-width: 1100px; margin: 0 auto; }
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+  button { background: #2b6cb0; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  button:disabled { background: #3a3f47; color: #888; cursor: default; }
+  button.secondary { background: #3a3f47; }
+  label.file { background: #3a3f47; border-radius: 6px; padding: 8px 14px; cursor: pointer; }
+  label.file input { display: none; }
+  .views { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .view { background: #1b1e24; border: 1px solid #2a2e35; border-radius: 8px; padding: 10px; }
+  .view h2 { margin: 0 0 8px; font-size: 13px; color: #aab; font-weight: 600; }
+  canvas { width: 100%; height: auto; image-rendering: pixelated; background: #0c0d10; border-radius: 4px; display: block; }
+  #status { margin-left: auto; color: #9aa; font-size: 13px; }
+  .opt { display: flex; gap: 6px; align-items: center; color: #bcc; }
+  code { background: #0c0d10; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Open Image Denoise · WebGPU</h1>
+  <div class="sub">Running the OIDN RT filter in the browser, compiled to WebAssembly, denoising on the GPU via WebGPU.</div>
+</header>
+<main>
+  <div class="toolbar">
+    <button id="sample">Generate noisy sample</button>
+    <label class="file">Load image<input id="file" type="file" accept="image/*"></label>
+    <label class="opt"><input id="hdr" type="checkbox"> treat as HDR</label>
+    <button id="denoise" disabled>Denoise</button>
+    <span id="status">loading WebAssembly…</span>
+  </div>
+  <div class="views">
+    <div class="view"><h2>Input (noisy)</h2><canvas id="src"></canvas></div>
+    <div class="view"><h2>Output (denoised)</h2><canvas id="dst"></canvas></div>
+  </div>
+  <p style="color:#889;font-size:12px">
+    Requires a browser with WebGPU (Chrome/Edge 113+, or Firefox/Safari with WebGPU enabled).
+    Serve this directory over HTTP (e.g. <code>python -m http.server</code>) — opening the file
+    directly will not load the wasm module.
+  </p>
+</main>
+<script src="oidn_web.js"></script>
+<script src="denoise.js"></script>
+</body>
+</html>

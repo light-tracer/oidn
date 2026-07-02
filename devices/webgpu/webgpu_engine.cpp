@@ -380,7 +380,7 @@ OIDN_NAMESPACE_BEGIN
     source.code = { kConv2dWGSL, strlen(kConv2dWGSL) };
 
     WGPUShaderModuleDescriptor smDesc{};
-    smDesc.nextInChain = reinterpret_cast<const WGPUChainedStruct*>(&source);
+    smDesc.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&source);
     smDesc.label = { nullptr, 0 };
 
     shaderModule = wgpuDeviceCreateShaderModule(device->device, &smDesc);
@@ -425,7 +425,7 @@ OIDN_NAMESPACE_BEGIN
     sourceV.code = { kConv2dVec4WGSL, strlen(kConv2dVec4WGSL) };
 
     WGPUShaderModuleDescriptor smDescV{};
-    smDescV.nextInChain = reinterpret_cast<const WGPUChainedStruct*>(&sourceV);
+    smDescV.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&sourceV);
     smDescV.label = { nullptr, 0 };
     convVec4ShaderModule = wgpuDeviceCreateShaderModule(device->device, &smDescV);
 
@@ -452,7 +452,7 @@ OIDN_NAMESPACE_BEGIN
     source.code = { kUpsampleWGSL, strlen(kUpsampleWGSL) };
 
     WGPUShaderModuleDescriptor smDesc{};
-    smDesc.nextInChain = reinterpret_cast<const WGPUChainedStruct*>(&source);
+    smDesc.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&source);
     smDesc.label = { nullptr, 0 };
 
     upsampleShaderModule = wgpuDeviceCreateShaderModule(device->device, &smDesc);
@@ -498,7 +498,7 @@ OIDN_NAMESPACE_BEGIN
     source.code = { kPoolWGSL, strlen(kPoolWGSL) };
 
     WGPUShaderModuleDescriptor smDesc{};
-    smDesc.nextInChain = reinterpret_cast<const WGPUChainedStruct*>(&source);
+    smDesc.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&source);
     smDesc.label = { nullptr, 0 };
 
     poolShaderModule = wgpuDeviceCreateShaderModule(device->device, &smDesc);
@@ -558,7 +558,7 @@ OIDN_NAMESPACE_BEGIN
     source.code = { kWGSL, strlen(kWGSL) };
 
     WGPUShaderModuleDescriptor smDesc{};
-    smDesc.nextInChain = reinterpret_cast<const WGPUChainedStruct*>(&source);
+    smDesc.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&source);
     smDesc.label = { nullptr, 0 };
 
     addShaderModule = wgpuDeviceCreateShaderModule(device->device, &smDesc);
@@ -616,7 +616,7 @@ OIDN_NAMESPACE_BEGIN
     source.code = { kWGSL, strlen(kWGSL) };
 
     WGPUShaderModuleDescriptor smDesc{};
-    smDesc.nextInChain = reinterpret_cast<const WGPUChainedStruct*>(&source);
+    smDesc.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&source);
     smDesc.label = { nullptr, 0 };
 
     mulShaderModule = wgpuDeviceCreateShaderModule(device->device, &smDesc);
@@ -674,7 +674,7 @@ OIDN_NAMESPACE_BEGIN
     source.code = { kWGSL, strlen(kWGSL) };
 
     WGPUShaderModuleDescriptor smDesc{};
-    smDesc.nextInChain = reinterpret_cast<const WGPUChainedStruct*>(&source);
+    smDesc.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&source);
     smDesc.label = { nullptr, 0 };
 
     softplusShaderModule = wgpuDeviceCreateShaderModule(device->device, &smDesc);
@@ -778,7 +778,7 @@ OIDN_NAMESPACE_BEGIN
     source.chain.sType = WGPUSType_ShaderSourceWGSL;
     source.code = { code, strlen(code) };
     WGPUShaderModuleDescriptor smDesc{};
-    smDesc.nextInChain = reinterpret_cast<const WGPUChainedStruct*>(&source);
+    smDesc.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&source);
     smDesc.label = { nullptr, 0 };
     cp.module = wgpuDeviceCreateShaderModule(device->device, &smDesc);
 

@@ -14,6 +14,9 @@ OIDN_NAMESPACE_BEGIN
 #if defined(OIDN_STATIC_LIB)
   OIDN_DECLARE_INIT_STATIC_MODULE(device_cpu);
   OIDN_DECLARE_INIT_STATIC_MODULE(device_metal);
+  #if defined(OIDN_DEVICE_WEBGPU)
+    OIDN_DECLARE_INIT_STATIC_MODULE(device_webgpu);
+  #endif
 
   #define OIDN_INIT_STATIC_MODULE(name) init_##name()
 #else

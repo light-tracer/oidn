@@ -4,10 +4,14 @@
 include(CheckCXXCompilerFlag)
 
 # Detect the processor architecture
-if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+# Emscripten/WebAssembly is a 32-bit target (wasm32); the GPU-only web build
+# does not use any of the 64-bit CPU code paths, so allow it through.
+if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8 AND NOT EMSCRIPTEN)
   message(FATAL_ERROR "Intel(R) Open Image Denoise supports 64-bit platforms only")
 endif()
-if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "arm64|aarch64|ARM64" OR IOS)
+if(EMSCRIPTEN)
+  set(OIDN_ARCH "WASM")
+elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "arm64|aarch64|ARM64" OR IOS)
   set(OIDN_ARCH "ARM64")
 else()
   set(OIDN_ARCH "X64")
