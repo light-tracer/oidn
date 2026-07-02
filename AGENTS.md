@@ -16,11 +16,28 @@ End Goal: add the new backend based on the WebGPU API.
 ## Configure: enable WebGPU backend (OFF by default)
 cmake -B build -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
-      -DOIDN_DEVICE_WEBGPU=ON \
-      -DOIDN_FILTER_RT=OFF -DOIDN_FILTER_RTLIGHTMAP=OFF .
+      -DOIDN_DEVICE_WEBGPU=ON .
 
 ## Build everything
 cmake --build build -j$(nproc)
+
+### Windows build (added 2026-07)
+Works with VS2022 + Ninja. Prerequisites: ISPC binary + oneTBB binary release,
+weights + mkl-dnn submodules (NOTE: .gitmodules relative URLs resolve to the
+light-tracer org which lacks the submodule repos; override with
+`git config submodule.mkl-dnn.url https://github.com/OpenImageDenoise/mkl-dnn.git`
+and `git config submodule.weights.url https://github.com/OpenImageDenoise/oidn-weights.git`).
+
+```
+git submodule update --init weights external/mkl-dnn
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DOIDN_DEVICE_WEBGPU=ON ^
+      -DISPC_EXECUTABLE=<deps>/ispc-v1.26.0-windows/bin/ispc.exe ^
+      -DTBB_ROOT=<deps>/oneapi-tbb-2021.12.0
+cmake --build build -j
+```
+Run from a VS x64 developer environment (vcvars64.bat). At runtime, the TBB
+redist dir and the build dir (wgpu_native.dll) must be on PATH.
+wgpu-native Windows asset (x86_64-msvc) is wired into cmake/oidn_wgpu.cmake.
 
 ## Running WebGPU Tests with Software Emulation
 WebGPU uses Vulkan by default. In headless environments without a discrete GPU
@@ -57,7 +74,41 @@ The only presistent thing is commited code. While iterating on code feel free to
 // AICODE-ASK: open questions stored for later or for human to answer
 
 ## WebGPU Backend – Current State ✅
-Milestone “single-layer bootstrap” is finished:
+Milestone **“end-to-end RT denoiser”** is finished (2026-07):
+
+* `oidnDenoise -d wgpu -f RT --hdr color.pfm --alb albedo.pfm --nrm normal.pfm`
+  produces output matching the CPU backend to RMSE ~1e-6 (512×512, 1 tile,
+  HDR with autoexposure, and LDR; with and without aux images).
+* The conv kernel implements the core Conv contract: same-padding convolution
+  (dst H/W == src H/W), configurable activation (none/ReLU), per-channel or
+  full-tensor bias, and (dormant) fused Pool/Upsample post-ops. `ConcatConvHWC`
+  (UNet skip connections) works on top of it — the second conv's dst-as-bias
+  aliasing is handled with a special bias mode that reads the bias through the
+  dst binding (WebGPU forbids binding one buffer as both read-only and
+  read-write in a dispatch).
+* Graph execution notes (hard-won, do not regress):
+  - wgpu tracks buffer usage per-buffer, not per-range. All tensors of a graph
+    are suballocated from one heap `WGPUBuffer`, so **all** tensor bindings in
+    the conv/pool/upsample/eltwise kernels are `read_write` storage.
+  - Binding offsets must include BOTH the `WebGPUBuffer`'s own offset within
+    the heap (`getWGPUBufferOffset()`) and the tensor's offset within the
+    buffer (`Memory::getByteOffset()`). A missing `.offset` in the pool bind
+    group entries silently corrupted the whole UNet at one point.
+  - `WebGPUEngine::getBufferByteSizeAndAlignment` returns 256-byte alignment
+    (WebGPU minStorageBufferOffsetAlignment).
+  - Images (filter inputs/outputs) are accessed via `WebGPUImageAccess`
+    (webgpu_image_util.h): device-buffer-backed images are bound directly,
+    host-memory images are staged. Never call `Image::getPtr()` for device
+    images — it is null (no unified memory in WebGPU!).
+  - `Autoexposure::getDstPtr()` is virtual now; the WebGPU op host-mediates the
+    result (the core hands that pointer to TransferFunction, which dereferences
+    it on the host — a UMA assumption that WebGPU cannot satisfy).
+  - The autoexposure kernel replicates the CPU binned log-average algorithm.
+  - Debug aid: set `OIDN_DUMP_OPS=1` to print per-op output stats (mean/min/
+    max/nan) during Graph::submit on any backend — invaluable for comparing
+    backends layer by layer.
+
+Earlier milestone “single-layer bootstrap”:
 
 New device type OIDN_DEVICE_TYPE_WEBGPU should be selectable via public C API.
 
@@ -132,6 +183,7 @@ They pass if
 Priority	Task	Brief Description
 P0      Element-wise kernels    **Done** – WGSL implementations of add, mul, and softplus are available.
 P1      Memory allocator        **Done** – buffers share memory through WebGPUArena/WebGPUHeap.
-P1	Graph execution	Record multiple layers in a single command buffer to amortise overhead.
-P2	Full denoiser demo	Make examples/denoise run on a 256×256 tile using the WebGPU backend.
-P2	Performance passes	Explore workgroup sizes, shared-memory tiling, fused convolution blocks.
+P1	Full denoiser	**Done** – oidnDenoise runs the RT filter on WebGPU, matching CPU output (RMSE ~1e-6).
+P1	Performance	The 512×512 HDR denoise takes ~1.2 s vs ~63 ms on CPU. Low-hanging fruit: record the whole graph in one command buffer (each op currently creates+submits its own), enable the fused conv post-ops (override WebGPUEngine::isConvSupported; the kernel already implements Pool/Upsample fusion but it is untested), cache per-op pipelines instead of recreating shaders in input/output/autoexposure ops each submit, workgroup-size/shared-memory tiling for conv.
+P2	Web/Emscripten build	Nothing exists yet: cmake fetches native wgpu-native binaries (linux/macos/windows). A web build needs emdawnwebgpu/Emscripten plumbing and an async entry point (no blocking waits on the web).
+P2	Robustness	Image row strides are assumed packed float3; tiling >1 tile untested on WebGPU; WebGPU.Eltwise still skipped (non-determinism seen on Lavapipe only).
