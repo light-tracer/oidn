@@ -3,7 +3,7 @@
 
 OIDN_NAMESPACE_BEGIN
 
-  __attribute__((visibility("default"))) __attribute__((used)) WebGPUEngine* getEngine(DeviceRef device)
+  OIDN_WEBGPU_API WebGPUEngine* getEngine(const DeviceRef& device)
   {
     if (!device)
       return nullptr;

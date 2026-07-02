@@ -6,11 +6,10 @@ OIDN_NAMESPACE_BEGIN
   WebGPUConv::WebGPUConv(WebGPUEngine* engine, const ConvDesc& desc)
     : Conv(desc), engine(engine)
   {
-    const int oh = srcDesc.getH() - weightDesc.getH() + 1;
-    const int ow = srcDesc.getW() - weightDesc.getW() + 1;
-    TensorDims dstDims{weightDesc.getO(), oh, ow};
-    TensorDims dstPaddedDims{weightDesc.getPaddedO(), oh, ow};
-    dstDesc = {dstDims, dstPaddedDims, srcDesc.layout, srcDesc.dataType};
+    // The base Conv constructor computes dstDesc (same-padding convolution,
+    // with H/W halved or doubled by the fused Pool/Upsample post-op)
+    if (weightDesc.getH() % 2 == 0 || weightDesc.getW() % 2 == 0)
+      throw std::invalid_argument("WebGPU convolution supports only odd kernel sizes");
   }
 
   void WebGPUConv::submitKernels(const Ref<CancellationToken>&)
@@ -30,15 +29,57 @@ OIDN_NAMESPACE_BEGIN
     if (!sb || !wb || !bb || !ob)
       throw std::invalid_argument("tensor not on WebGPU device");
 
-    WebGPUTensor A  = {sb->getWGPUBuffer(), srcDev->getByteOffset(), 1,
-                       (uint32_t)srcDesc.getC(), (uint32_t)srcDesc.getH(), (uint32_t)srcDesc.getW(), WebGPUTensorType::INPUT};
-    WebGPUTensor Wt = {wb->getWGPUBuffer(), weightDev->getByteOffset(), (uint32_t)weightDesc.getO(),
-                       (uint32_t)weightDesc.getI(), (uint32_t)weightDesc.getH(), (uint32_t)weightDesc.getW(), WebGPUTensorType::CONST};
-    WebGPUTensor B  = {bb->getWGPUBuffer(), biasDev->getByteOffset(), (uint32_t)biasDesc.getX(), 1,1,1, WebGPUTensorType::CONST};
-    WebGPUTensor O  = {ob->getWGPUBuffer(), dstDev->getByteOffset(), (uint32_t)dstDesc.getC(), 1,
-                       (uint32_t)dstDesc.getH(), (uint32_t)dstDesc.getW(), WebGPUTensorType::OUTPUT};
+    WebGPUConvParams params;
+    params.padH = (weightDesc.getH() - 1) / 2;
+    params.padW = (weightDesc.getW() - 1) / 2;
+    params.activation = (activation == Activation::ReLU) ? 1 : 0;
 
-    engine->conv2d_eltwise(A, Wt, B, O);
+    switch (postOp)
+    {
+    case PostOp::None:     params.postOp = 0; break;
+    case PostOp::Pool:     params.postOp = 1; break;
+    case PostOp::Upsample: params.postOp = 2; break;
+    default:
+      throw std::invalid_argument("unsupported convolution postop");
+    }
+
+    WebGPUTensor A  = {sb->getWGPUBuffer(), sb->getWGPUBufferOffset() + srcDev->getByteOffset(), 1,
+                       (uint32_t)srcDesc.getC(), (uint32_t)srcDesc.getH(), (uint32_t)srcDesc.getW(), WebGPUTensorType::Input};
+    WebGPUTensor Wt = {wb->getWGPUBuffer(), wb->getWGPUBufferOffset() + weightDev->getByteOffset(), (uint32_t)weightDesc.getO(),
+                       (uint32_t)weightDesc.getI(), (uint32_t)weightDesc.getH(), (uint32_t)weightDesc.getW(), WebGPUTensorType::Const};
+    WebGPUTensor O  = {ob->getWGPUBuffer(), ob->getWGPUBufferOffset() + dstDev->getByteOffset(), 1,
+                       (uint32_t)dstDesc.getC(), (uint32_t)dstDesc.getH(), (uint32_t)dstDesc.getW(), WebGPUTensorType::Output};
+
+    WebGPUTensor B;
+    if (biasDesc.getRank() == 1)
+    {
+      params.biasMode = 0;
+      B = {bb->getWGPUBuffer(), bb->getWGPUBufferOffset() + biasDev->getByteOffset(), (uint32_t)biasDesc.getX(), 1, 1, 1, WebGPUTensorType::Const};
+    }
+    else // rank 3: full-tensor bias with the same shape as dst
+    {
+      if (postOp != PostOp::None)
+        throw std::invalid_argument("tensor bias requires PostOp::None");
+
+      if (bb->getWGPUBuffer() == ob->getWGPUBuffer() &&
+          bb->getWGPUBufferOffset() + biasDev->getByteOffset() ==
+          ob->getWGPUBufferOffset() + dstDev->getByteOffset())
+      {
+        // dst doubles as bias (ConcatConvHWC): read the bias through the dst
+        // binding to respect WebGPU buffer aliasing rules, and bind a dummy
+        // buffer in the bias slot
+        params.biasMode = 2;
+        B = {engine->getDummyBuffer(), 0, 1, 1, 1, 1, WebGPUTensorType::Const};
+      }
+      else
+      {
+        params.biasMode = 1;
+        B = {bb->getWGPUBuffer(), bb->getWGPUBufferOffset() + biasDev->getByteOffset(), 1,
+             (uint32_t)biasDesc.getC(), (uint32_t)biasDesc.getH(), (uint32_t)biasDesc.getW(), WebGPUTensorType::Const};
+      }
+    }
+
+    engine->conv2d(A, Wt, B, O, params);
   }
 
 OIDN_NAMESPACE_END

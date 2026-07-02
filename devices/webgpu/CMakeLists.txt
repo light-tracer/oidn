@@ -10,6 +10,7 @@ set(OIDN_WEBGPU_SOURCES
   webgpu_input_process.cpp
   webgpu_output_process.cpp
   webgpu_image_copy.cpp
+  webgpu_image_util.cpp
   webgpu_autoexposure.cpp
   webgpu_module.cpp
   webgpu_helper.cpp)
@@ -25,6 +26,9 @@ endif()
 
 target_include_directories(OpenImageDenoise_device_webgpu PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(OpenImageDenoise_device_webgpu PRIVATE OpenImageDenoise_core wgpu_native)
+
+# The unit tests link against internal engine/arena symbols
+oidn_export_all_symbols(OpenImageDenoise_device_webgpu)
 
 if(OIDN_STATIC_LIB)
   oidn_install_static_module(OpenImageDenoise_device_webgpu)

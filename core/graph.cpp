@@ -479,45 +479,42 @@ OIDN_NAMESPACE_BEGIN
       totalTime += time;
     #endif
 
-    #if 0
-      // Dump
-      engine->wait();
-
-      Ref<Tensor> dst;
-
-      if (auto inputProcess = dynamicRefCast<InputProcess>(ops[i]))
-        dst = inputProcess->getDst();
-      else if (auto conv = dynamicRefCast<Conv>(ops[i]))
-        dst = conv->getDst();
-      else if (auto conv = dynamicRefCast<ConcatConv>(ops[i]))
-        dst = conv->getDst();
-      else if (auto pool = dynamicRefCast<Pool>(ops[i]))
-        dst = pool->getDst();
-      else if (auto upsample = dynamicRefCast<Upsample>(ops[i]))
-        dst = upsample->getDst();
-
-      if (dst)
+      // Debug: dump per-op output statistics (set OIDN_DUMP_OPS=1)
+      if (std::getenv("OIDN_DUMP_OPS"))
       {
-        const uint32_t refHash = dst->getHash();
+        engine->wait();
 
-        std::cout << std::setfill('0') << std::setw(2) << i << ": "
-                  << std::hex << std::setfill('0') << std::setw(8) << refHash << std::dec
-                  << " " << ops[i]->getName() << std::endl;
+        Ref<Tensor> dst;
 
-        /*
-        for (int j = 0; j < 100; ++j)
+        if (auto inputProcess = dynamicRefCast<InputProcess>(ops[i]))
+          dst = inputProcess->getDst();
+        else if (auto conv = dynamicRefCast<Conv>(ops[i]))
+          dst = conv->getDst();
+        else if (auto concatConv = dynamicRefCast<ConcatConv>(ops[i]))
+          dst = concatConv->getDst();
+        else if (auto pool = dynamicRefCast<Pool>(ops[i]))
+          dst = pool->getDst();
+        else if (auto upsample = dynamicRefCast<Upsample>(ops[i]))
+          dst = upsample->getDst();
+
+        if (dst && dst->getBuffer() && dst->getDataType() == DataType::Float32)
         {
-          ops[i]->submit();
-          engine->wait();
-          const uint32_t hash = dst->getHash();
-          if (hash != refHash)
-            throw std::runtime_error("output hash mismatch (non-deterministic output)");
+          const size_t numElems = dst->getByteSize() / sizeof(float);
+          std::vector<float> host(numElems);
+          dst->getBuffer()->read(dst->getByteOffset(), dst->getByteSize(), host.data());
+          double mean = 0, mn = double(host[0]), mx = double(host[0]);
+          size_t numNan = 0;
+          for (float v : host)
+          {
+            if (math::isnan(v)) { numNan++; continue; }
+            mean += v; mn = math::min(mn, double(v)); mx = math::max(mx, double(v));
+          }
+          mean /= double(numElems);
+          std::cout << i << ": " << ops[i]->getName()
+                    << " mean=" << mean << " min=" << mn << " max=" << mx
+                    << " nan=" << numNan << " n=" << numElems << std::endl;
         }
-        */
-
-        dst->dump(toString(i) + "_" + ops[i]->getName() + "_");
       }
-    #endif
     }
 
   #if defined(OIDN_MICROBENCH)

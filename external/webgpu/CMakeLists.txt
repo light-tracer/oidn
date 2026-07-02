@@ -18,7 +18,22 @@ oidn_download_wgpu("${WGPU_ROOT}")   # <-- downloads + unpacks into WGPU_ROOT
 #     • Some also ship a shared library (.so / .dylib), so we fall back to that
 # ──────────────────────────────────────────────────────────────────────────────
 
-if(APPLE)
+if(WIN32)
+  # Use the shared library: the static wgpu_native.lib would require manually
+  # linking a long list of system libraries (d3dcompiler, ws2_32, userenv, ...)
+  if(EXISTS "${WGPU_ROOT}/lib/wgpu_native.dll" AND EXISTS "${WGPU_ROOT}/lib/wgpu_native.dll.lib")
+      add_library(wgpu_native SHARED IMPORTED GLOBAL)
+      set_target_properties(wgpu_native PROPERTIES
+          IMPORTED_LOCATION "${WGPU_ROOT}/lib/wgpu_native.dll"
+          IMPORTED_IMPLIB   "${WGPU_ROOT}/lib/wgpu_native.dll.lib")
+      # Make the DLL available next to the built binaries
+      file(COPY "${WGPU_ROOT}/lib/wgpu_native.dll" DESTINATION "${CMAKE_BINARY_DIR}")
+  else()
+      message(FATAL_ERROR
+          "Couldn't find wgpu_native.dll in ${WGPU_ROOT}/lib — "
+          "did the download fail?")
+  endif()
+elseif(APPLE)
   if(EXISTS "${WGPU_ROOT}/lib/libwgpu_native${CMAKE_SHARED_LIBRARY_SUFFIX}")
       add_library(wgpu_native SHARED IMPORTED GLOBAL)
       set_target_properties(wgpu_native PROPERTIES

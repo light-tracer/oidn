@@ -16,10 +16,10 @@ OIDN_NAMESPACE_BEGIN
     if (!sb || !ob)
       throw std::invalid_argument("tensor not on WebGPU device");
 
-    WebGPUTensor A = {sb->getWGPUBuffer(), srcDev->getByteOffset(), 1,
-                      (uint32_t)srcDesc.getC(), (uint32_t)srcDesc.getH(), (uint32_t)srcDesc.getW(), WebGPUTensorType::INPUT};
-    WebGPUTensor O = {ob->getWGPUBuffer(), dstDev->getByteOffset(), (uint32_t)dstDesc.getC(), 1,
-                      (uint32_t)dstDesc.getH(), (uint32_t)dstDesc.getW(), WebGPUTensorType::OUTPUT};
+    WebGPUTensor A = {sb->getWGPUBuffer(), sb->getWGPUBufferOffset() + srcDev->getByteOffset(), 1,
+                      (uint32_t)srcDesc.getC(), (uint32_t)srcDesc.getH(), (uint32_t)srcDesc.getW(), WebGPUTensorType::Input};
+    WebGPUTensor O = {ob->getWGPUBuffer(), ob->getWGPUBufferOffset() + dstDev->getByteOffset(), (uint32_t)dstDesc.getC(), 1,
+                      (uint32_t)dstDesc.getH(), (uint32_t)dstDesc.getW(), WebGPUTensorType::Output};
 
     engine->upsample2x(A, O);
   }

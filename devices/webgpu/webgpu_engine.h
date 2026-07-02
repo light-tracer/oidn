@@ -22,6 +22,7 @@ OIDN_NAMESPACE_BEGIN
     Device* getDevice() const override;
 
     // Heap / Buffer
+    SizeAndAlignment getBufferByteSizeAndAlignment(size_t byteSize, Storage storage) override;
     Ref<Heap>   newHeap(size_t byteSize, Storage storage) override;
     Ref<Buffer> newBuffer(size_t byteSize, Storage storage) override;
     Ref<Buffer> newBuffer(void* ptr, size_t byteSize) override;
@@ -45,10 +46,15 @@ OIDN_NAMESPACE_BEGIN
     WebGPUTensor makeTensor(const BufferRef& buffer, WebGPUTensorType type,
                             uint32_t n, uint32_t c, uint32_t h, uint32_t w);
 
-    void conv2d_eltwise(const WebGPUTensor& src,
-                        const WebGPUTensor& weight,
-                        const WebGPUTensor& bias,
-                        const WebGPUTensor& dst);
+    void conv2d(const WebGPUTensor& src,
+                const WebGPUTensor& weight,
+                const WebGPUTensor& bias,
+                const WebGPUTensor& dst,
+                const WebGPUConvParams& params);
+
+    // Small placeholder buffer for unused bindings (e.g. the bias binding when
+    // the bias aliases dst)
+    WGPUBuffer getDummyBuffer();
 
     void upsample2x(const WebGPUTensor& src,
                     const WebGPUTensor& dst);
@@ -108,6 +114,8 @@ OIDN_NAMESPACE_BEGIN
     WGPUBindGroupLayout softplusBindGroupLayout = nullptr;
     WGPUPipelineLayout softplusPipelineLayout = nullptr;
     WGPUComputePipeline softplusPipeline = nullptr;
+
+    WGPUBuffer dummyBuf = nullptr;
 
     struct PendingReadback
     {

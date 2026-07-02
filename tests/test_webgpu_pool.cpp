@@ -23,7 +23,7 @@ TEST(WebGPU, Pool2x2)
   float src[N*C*H*W];
   for(size_t i=0;i<N*C*H*W;++i)
     src[i] = float(i+1);
-  uint32_t OH = H/2, OW = W/2;
+  constexpr uint32_t OH = H/2, OW = W/2;
   float out[C*OH*OW];
   float ref[C*OH*OW];
 

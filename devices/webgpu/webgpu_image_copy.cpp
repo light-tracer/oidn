@@ -1,6 +1,7 @@
 #include "webgpu_image_copy.h"
 #include "webgpu_device.h"
 #include "webgpu_buffer.h"
+#include "webgpu_image_util.h"
 #include <cstring>
 #include <webgpu/webgpu.h>
 
@@ -22,10 +23,8 @@ OIDN_NAMESPACE_BEGIN
     const int W = src->getW();
     size_t byteSize = size_t(H)*W*3*sizeof(float);
 
-    WGPUBuffer srcBuf = dev->createBuffer(byteSize,
-                    WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
-                    src->getPtr());
-    WebGPUBuffer dstBuf(engine, byteSize);
+    WebGPUImageAccess srcAcc(engine, src.get(), byteSize, false);
+    WebGPUImageAccess dstAcc(engine, dst.get(), byteSize, true);
 
     static const char* kWGSL = R"wgsl(
     struct Image { data: array<f32>, };
@@ -89,8 +88,8 @@ OIDN_NAMESPACE_BEGIN
     WGPUComputePipeline pipeline = wgpuDeviceCreateComputePipeline(dev->device, &cpDesc);
 
     WGPUBindGroupEntry bgEntries[3] = {};
-    bgEntries[0].binding = 0; bgEntries[0].buffer = srcBuf; bgEntries[0].size = byteSize;
-    bgEntries[1].binding = 1; bgEntries[1].buffer = dstBuf.getWGPUBuffer(); bgEntries[1].size = byteSize;
+    bgEntries[0].binding = 0; bgEntries[0].buffer = srcAcc.getWGPUBuffer(); bgEntries[0].offset = srcAcc.getOffset(); bgEntries[0].size = byteSize;
+    bgEntries[1].binding = 1; bgEntries[1].buffer = dstAcc.getWGPUBuffer(); bgEntries[1].offset = dstAcc.getOffset(); bgEntries[1].size = byteSize;
     bgEntries[2].binding = 2; bgEntries[2].buffer = sizeBuf; bgEntries[2].size = sizeof(Size);
     WGPUBindGroupDescriptor bgDesc{};
     bgDesc.layout = bgl;
@@ -111,7 +110,7 @@ OIDN_NAMESPACE_BEGIN
     wgpuCommandBufferRelease(cmd);
     wgpuCommandEncoderRelease(enc);
 
-    dstBuf.read(0, byteSize, dst->getPtr());
+    dstAcc.finish();
 
     wgpuBindGroupRelease(bg);
     wgpuPipelineLayoutRelease(pipelineLayout);
@@ -119,7 +118,6 @@ OIDN_NAMESPACE_BEGIN
     wgpuComputePipelineRelease(pipeline);
     wgpuShaderModuleRelease(shader);
     wgpuBufferRelease(sizeBuf);
-    wgpuBufferRelease(srcBuf);
   }
 
 OIDN_NAMESPACE_END

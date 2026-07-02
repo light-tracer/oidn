@@ -1,7 +1,9 @@
 #include "webgpu_input_process.h"
 #include "webgpu_buffer.h"
 #include "webgpu_device.h"
+#include "webgpu_image_util.h"
 #include "core/color.h"
+#include <memory>
 #include <vector>
 #include <webgpu/webgpu.h>
 
@@ -163,15 +165,12 @@ OIDN_NAMESPACE_BEGIN
     const int C = dstDesc.getC();
 
     size_t srcSize = size_t(H)*W*3*sizeof(float);
-    WGPUBuffer srcBuf = dev->createBuffer(srcSize,
-                    WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
-                    mainSrc->getPtr());
-    WGPUBuffer albedoBuf = hasAlbedo ?
-        dev->createBuffer(srcSize, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst, albedo->getPtr()) :
-        dev->createBuffer(4, WGPUBufferUsage_Storage);
-    WGPUBuffer normalBuf = hasNormal ?
-        dev->createBuffer(srcSize, WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst, normal->getPtr()) :
-        dev->createBuffer(4, WGPUBufferUsage_Storage);
+    WebGPUImageAccess srcAcc(engine, mainSrc, srcSize, false);
+    std::unique_ptr<WebGPUImageAccess> albedoAcc, normalAcc;
+    if (hasAlbedo)
+      albedoAcc.reset(new WebGPUImageAccess(engine, albedo.get(), srcSize, false));
+    if (hasNormal)
+      normalAcc.reset(new WebGPUImageAccess(engine, normal.get(), srcSize, false));
 
     auto* dbuf = dynamic_cast<WebGPUBuffer*>(dst->getBuffer());
     if (!dbuf)
@@ -232,10 +231,14 @@ OIDN_NAMESPACE_BEGIN
     WGPUComputePipeline pipeline = wgpuDeviceCreateComputePipeline(dev->device, &cpDesc);
 
     WGPUBindGroupEntry bgEntries[5] = {};
-    bgEntries[0].binding = 0; bgEntries[0].buffer = srcBuf; bgEntries[0].size = srcSize;
-    bgEntries[1].binding = 1; bgEntries[1].buffer = albedoBuf; bgEntries[1].size = hasAlbedo ? srcSize : 4;
-    bgEntries[2].binding = 2; bgEntries[2].buffer = normalBuf; bgEntries[2].size = hasNormal ? srcSize : 4;
-    bgEntries[3].binding = 3; bgEntries[3].buffer = dbuf->getWGPUBuffer(); bgEntries[3].offset = dst->getByteOffset(); bgEntries[3].size = size_t(C)*H*W*sizeof(float);
+    bgEntries[0].binding = 0; bgEntries[0].buffer = srcAcc.getWGPUBuffer(); bgEntries[0].offset = srcAcc.getOffset(); bgEntries[0].size = srcSize;
+    bgEntries[1].binding = 1;
+    if (hasAlbedo) { bgEntries[1].buffer = albedoAcc->getWGPUBuffer(); bgEntries[1].offset = albedoAcc->getOffset(); bgEntries[1].size = srcSize; }
+    else           { bgEntries[1].buffer = engine->getDummyBuffer(); bgEntries[1].size = 16; }
+    bgEntries[2].binding = 2;
+    if (hasNormal) { bgEntries[2].buffer = normalAcc->getWGPUBuffer(); bgEntries[2].offset = normalAcc->getOffset(); bgEntries[2].size = srcSize; }
+    else           { bgEntries[2].buffer = engine->getDummyBuffer(); bgEntries[2].size = 16; }
+    bgEntries[3].binding = 3; bgEntries[3].buffer = dbuf->getWGPUBuffer(); bgEntries[3].offset = dbuf->getWGPUBufferOffset() + dst->getByteOffset(); bgEntries[3].size = size_t(C)*H*W*sizeof(float);
     bgEntries[4].binding = 4; bgEntries[4].buffer = paramsBuf; bgEntries[4].size = sizeof(Params);
     WGPUBindGroupDescriptor bgDesc{};
     bgDesc.layout = bgl;
@@ -262,9 +265,6 @@ OIDN_NAMESPACE_BEGIN
     wgpuComputePipelineRelease(pipeline);
     wgpuShaderModuleRelease(shader);
     wgpuBufferRelease(paramsBuf);
-    wgpuBufferRelease(srcBuf);
-    wgpuBufferRelease(albedoBuf);
-    wgpuBufferRelease(normalBuf);
   }
 
 OIDN_NAMESPACE_END

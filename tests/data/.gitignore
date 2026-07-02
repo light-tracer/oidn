@@ -1,0 +1,4 @@
+# Generated test images and dumps
+*.pfm
+*.png
+*.txt

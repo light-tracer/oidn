@@ -1,4 +1,19 @@
-find_package(GTest REQUIRED)
+# The tests include devices/cpu headers, which require TBB
+find_package(TBB COMPONENTS tbb CONFIG REQUIRED)
+
+find_package(GTest QUIET)
+if(NOT GTest_FOUND)
+  include(FetchContent)
+  FetchContent_Declare(
+    googletest
+    URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+  )
+  set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+  set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
+  set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(googletest)
+  add_library(GTest::GTest ALIAS gtest)
+endif()
 
 function(add_webgpu_test exe test_name source)
   add_executable(${exe} ${source} test_main.cpp)
@@ -6,12 +21,13 @@ function(add_webgpu_test exe test_name source)
   target_include_directories(${exe} PRIVATE ${PROJECT_SOURCE_DIR}/devices/cpu)
   target_include_directories(${exe} PRIVATE ${PROJECT_SOURCE_DIR})
   target_include_directories(${exe} PRIVATE ${OIDN_WGPU_DIR}/include)
-  target_link_libraries(${exe} PRIVATE OpenImageDenoise OpenImageDenoise_core OpenImageDenoise_device_cpu OpenImageDenoise_device_webgpu GTest::GTest)
+  target_link_libraries(${exe} PRIVATE OpenImageDenoise OpenImageDenoise_core OpenImageDenoise_device_cpu OpenImageDenoise_device_webgpu GTest::GTest TBB::tbb)
   add_test(NAME ${test_name} COMMAND ${exe})
   set_property(TEST ${test_name} PROPERTY SKIP_RETURN_CODE 77)
 endfunction()
 
 add_webgpu_test(webgpu_conv_test WebGPU.Conv2d test_webgpu_conv.cpp)
+add_webgpu_test(webgpu_concat_conv_test WebGPU.ConcatConv test_webgpu_concat_conv.cpp)
 add_webgpu_test(webgpu_upsample_test WebGPU.Upsample test_webgpu_upsample.cpp)
 add_webgpu_test(webgpu_pool_test WebGPU.Pool test_webgpu_pool.cpp)
 add_webgpu_test(webgpu_input_process_test WebGPU.InputProcess test_webgpu_input_process.cpp)

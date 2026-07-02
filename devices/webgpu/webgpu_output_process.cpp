@@ -1,4 +1,5 @@
 #include "webgpu_output_process.h"
+#include "webgpu_image_util.h"
 #include "webgpu_buffer.h"
 #include "webgpu_device.h"
 #include "core/color.h"
@@ -129,7 +130,7 @@ OIDN_NAMESPACE_BEGIN
       throw std::invalid_argument("unsupported image format");
 
     size_t outSize = size_t(H)*W*dstC*sizeof(float);
-    WebGPUBuffer outBuf(engine, outSize);
+    WebGPUImageAccess dstAcc(engine, dst.get(), outSize, true);
 
     struct Params
     {
@@ -182,8 +183,8 @@ OIDN_NAMESPACE_BEGIN
     WGPUComputePipeline pipeline = wgpuDeviceCreateComputePipeline(dev->device, &cpDesc);
 
     WGPUBindGroupEntry bgEntries[3] = {};
-    bgEntries[0].binding = 0; bgEntries[0].buffer = sb->getWGPUBuffer(); bgEntries[0].offset = src->getByteOffset(); bgEntries[0].size = size_t(C)*H*W*sizeof(float);
-    bgEntries[1].binding = 1; bgEntries[1].buffer = outBuf.getWGPUBuffer(); bgEntries[1].size = outSize;
+    bgEntries[0].binding = 0; bgEntries[0].buffer = sb->getWGPUBuffer(); bgEntries[0].offset = sb->getWGPUBufferOffset() + src->getByteOffset(); bgEntries[0].size = size_t(C)*H*W*sizeof(float);
+    bgEntries[1].binding = 1; bgEntries[1].buffer = dstAcc.getWGPUBuffer(); bgEntries[1].offset = dstAcc.getOffset(); bgEntries[1].size = outSize;
     bgEntries[2].binding = 2; bgEntries[2].buffer = paramsBuf; bgEntries[2].size = sizeof(Params);
 
     WGPUBindGroupDescriptor bgDesc{};
@@ -205,7 +206,7 @@ OIDN_NAMESPACE_BEGIN
     wgpuCommandBufferRelease(cmd);
     wgpuCommandEncoderRelease(enc);
 
-    outBuf.read(0, outSize, dst->getPtr());
+    dstAcc.finish();
 
     wgpuBindGroupRelease(bg);
     wgpuPipelineLayoutRelease(pipelineLayout);

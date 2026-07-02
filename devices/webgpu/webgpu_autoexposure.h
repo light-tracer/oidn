@@ -12,8 +12,13 @@ OIDN_NAMESPACE_BEGIN
     Engine* getEngine() const override { return engine; }
     void submitKernels(const Ref<CancellationToken>& ct) override;
 
+    // WebGPU buffers are not host-accessible, so the result is kept in a
+    // host-side copy that the transfer function can dereference
+    float* getDstPtr() const override { return &hostResult; }
+
   private:
     WebGPUEngine* engine;
+    mutable float hostResult = 1.f;
   };
 
 OIDN_NAMESPACE_END

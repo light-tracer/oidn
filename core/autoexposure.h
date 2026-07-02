@@ -39,7 +39,10 @@ OIDN_NAMESPACE_BEGIN
     }
 
     void setDst(const Ref<Record<float>>& dst) { this->dst = dst; }
-    float* getDstPtr() const { return dst->getPtr(); }
+
+    // Pointer to the result, dereferenceable on the host. Backends without
+    // host-accessible device memory must override this to host-mediate.
+    virtual float* getDstPtr() const { return dst->getPtr(); }
 
   protected:
     ImageDesc srcDesc;

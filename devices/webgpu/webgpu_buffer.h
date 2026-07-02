@@ -17,6 +17,11 @@ OIDN_NAMESPACE_BEGIN
 
     Engine* getEngine() const override { return engine; }
     WGPUBuffer getWGPUBuffer() const { return buffer; }
+
+    // Offset of this buffer within the backing WGPUBuffer (nonzero for arena
+    // suballocations, where the WGPUBuffer belongs to the heap). Must be added
+    // to any per-tensor/image offset when binding.
+    size_t getWGPUBufferOffset() const { return byteOffset; }
     void* getPtr() const override { return nullptr; }
     void* getHostPtr() const override { return nullptr; }
     size_t getByteSize() const override { return byteSize; }

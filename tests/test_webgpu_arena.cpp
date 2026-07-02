@@ -47,9 +47,9 @@ TEST(WebGPU, Arena)
   WebGPUBuffer* wB = static_cast<WebGPUBuffer*>(bufB.get());
   WebGPUBuffer* wOut = static_cast<WebGPUBuffer*>(reinterpret_cast<Buffer*>(bufOutRef.getHandle()));
 
-  WebGPUTensor tA{wA->getWGPUBuffer(), 0, 1,1,1,COUNT, WebGPUTensorType::INPUT};
-  WebGPUTensor tB{wB->getWGPUBuffer(), bufSize, 1,1,1,COUNT, WebGPUTensorType::INPUT};
-  WebGPUTensor tOut{wOut->getWGPUBuffer(), 0, 1,1,1,COUNT, WebGPUTensorType::INPUT};
+  WebGPUTensor tA{wA->getWGPUBuffer(), 0, 1,1,1,COUNT, WebGPUTensorType::Input};
+  WebGPUTensor tB{wB->getWGPUBuffer(), bufSize, 1,1,1,COUNT, WebGPUTensorType::Input};
+  WebGPUTensor tOut{wOut->getWGPUBuffer(), 0, 1,1,1,COUNT, WebGPUTensorType::Input};
 
   eng->add(tA,tB,tOut);
   dev.sync();

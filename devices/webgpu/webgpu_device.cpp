@@ -28,6 +28,21 @@ OIDN_NAMESPACE_BEGIN
       *out = device;
   }
 
+  static void handle_uncaptured_error(const WGPUDevice*, WGPUErrorType type,
+                                      WGPUStringView message, void*, void*)
+  {
+    fprintf(stderr, "WebGPU error (%d): %.*s\n", (int)type,
+            (int)message.length, message.data);
+    fflush(stderr);
+  }
+
+  static void handle_log(WGPULogLevel level, WGPUStringView message, void*)
+  {
+    fprintf(stderr, "wgpu log (%d): %.*s\n", (int)level,
+            (int)message.length, message.data);
+    fflush(stderr);
+  }
+
   WebGPUDevice::WebGPUDevice() {}
 
   WebGPUDevice::~WebGPUDevice()
@@ -53,11 +68,20 @@ OIDN_NAMESPACE_BEGIN
     while (!adapter)
       wgpuInstanceProcessEvents(instance);
 
+    if (isVerbose(2))
+    {
+      wgpuSetLogCallback(handle_log, nullptr);
+      wgpuSetLogLevel(WGPULogLevel_Warn);
+    }
+
+    WGPUDeviceDescriptor devDesc{};
+    devDesc.uncapturedErrorCallbackInfo.callback = handle_uncaptured_error;
+
     WGPURequestDeviceCallbackInfo deviceCb{};
     deviceCb.mode = WGPUCallbackMode_AllowProcessEvents;
     deviceCb.callback = handle_request_device;
     deviceCb.userdata1 = &device;
-    wgpuAdapterRequestDevice(adapter, nullptr, deviceCb);
+    wgpuAdapterRequestDevice(adapter, &devDesc, deviceCb);
     while (!device)
       wgpuInstanceProcessEvents(instance);
 

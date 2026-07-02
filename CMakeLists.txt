@@ -106,7 +106,11 @@ add_subdirectory(core)
 add_subdirectory(api)
 add_subdirectory(devices)
 enable_testing()
-add_subdirectory(tests)
+# The unit tests compare the WebGPU backend against the CPU backend, so they
+# require both devices to be enabled.
+if(OIDN_DEVICE_WEBGPU AND OIDN_DEVICE_CPU)
+  add_subdirectory(tests)
+endif()
 
 # Export targets from the build tree for external projects
 export(EXPORT OpenImageDenoise_Exports

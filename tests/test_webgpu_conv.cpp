@@ -20,15 +20,16 @@ TEST(WebGPU, Conv2d)
   dev.commit();
   WebGPUEngine* eng = getEngine(dev);
 
-  const uint32_t N=1,C=1,H=8,W=8;
-  const uint32_t OC=1,IC=1,KH=3,KW=3;
+  const uint32_t N=1,C=4,H=16,W=16;
+  const uint32_t OC=3,IC=4,KH=3,KW=3;
   float src[N*C*H*W];
   float weight[OC*IC*KH*KW];
   float bias[OC];
   for(size_t i=0;i<N*C*H*W;++i) src[i]= (float)i*0.01f + 1.0f;
   for(size_t i=0;i<OC*IC*KH*KW;++i) weight[i]= (float)(i+1)*0.1f;
   bias[0]=0.5f;
-  uint32_t OH=H-KH+1; uint32_t OW=W-KW+1;
+  // Same-padding convolution: output has the same spatial size as the input
+  constexpr uint32_t OH=H; constexpr uint32_t OW=W;
   float out[OC*OH*OW];
   float ref[OC*OH*OW];
 
@@ -102,22 +103,22 @@ TEST(WebGPU, Conv2d)
           }
     };
 
-    float tmp[OC*H*W];
-    unpackChwFull(static_cast<float*>(dstTensor->getPtr()), H, W, tmp);
-    for(int c=0;c<int(OC);++c)
-      for(int h=0;h<int(OH);++h)
-        for(int w=0;w<int(OW);++w)
-          ref[(size_t)c*OH*OW+h*OW+w]=tmp[(size_t)c*H*W+(h+1)*W+(w+1)];
+    unpackChwFull(static_cast<float*>(dstTensor->getPtr()), H, W, ref);
   }
   else
   {
-    for(uint32_t y=0;y<OH;++y)
-      for(uint32_t x=0;x<OW;++x)
+    constexpr int padH = (KH-1)/2, padW = (KW-1)/2;
+    for(int y=0;y<int(OH);++y)
+      for(int x=0;x<int(OW);++x)
       {
         float acc=0.f;
-        for(uint32_t ky=0;ky<KH;++ky)
-          for(uint32_t kx=0;kx<KW;++kx)
-            acc+=src[(y+ky)*W+(x+kx)]*weight[ky*KW+kx];
+        for(int ky=0;ky<int(KH);++ky)
+          for(int kx=0;kx<int(KW);++kx)
+          {
+            const int iy=y+ky-padH, ix=x+kx-padW;
+            if(iy<0||iy>=int(H)||ix<0||ix>=int(W)) continue;
+            acc+=src[iy*W+ix]*weight[ky*KW+kx];
+          }
         acc+=bias[0];
         if(acc<0.f) acc=0.f;
         ref[y*OW+x]=acc;
@@ -165,7 +166,8 @@ TEST(WebGPU, Conv2d)
       for(uint32_t c=0; c<OC; ++c)
         out[(size_t)c*OH*OW + h*OW + w] = outGPU[(h*OW + w)*OC + c];
 
+  // Relative tolerance: the CPU reference path uses half-precision weights
   for(size_t i=0;i<OC*OH*OW;++i)
-    ASSERT_NEAR(out[i], ref[i], 2e-4f);
+    ASSERT_NEAR(out[i], ref[i], 2e-4f * std::max(1.f, std::abs(ref[i])));
 }
 
