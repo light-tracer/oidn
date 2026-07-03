@@ -119,6 +119,30 @@ OIDN_NAMESPACE_BEGIN
     WGPUDeviceDescriptor devDesc{};
     devDesc.uncapturedErrorCallbackInfo.callback = handle_uncaptured_error;
 
+    // The defaults (256 MB max buffer, 128 MB max storage binding) are too
+    // small for the scratch heap and tensor bindings of larger images, so
+    // request everything the adapter supports (requesting the full supported
+    // limits struct is valid by construction on both wgpu-native and Dawn)
+    WGPULimits requiredLimits;
+    std::memset(&requiredLimits, 0, sizeof(requiredLimits));
+    if (wgpuAdapterGetLimits(adapter, &requiredLimits) == WGPUStatus_Success)
+    {
+      requiredLimits.nextInChain = nullptr;
+
+      // Adapters may report "unlimited" as UINT64_MAX, which collides with
+      // WGPU_LIMIT_U64_UNDEFINED ("use the default") when passed back as a
+      // required limit; substitute a large concrete value
+      if (requiredLimits.maxBufferSize == UINT64_MAX)
+        requiredLimits.maxBufferSize = 1ull << 34; // 16 GB
+
+      devDesc.requiredLimits = &requiredLimits;
+
+      if (isVerbose())
+        std::cout << "  Limits  : maxBufferSize=" << requiredLimits.maxBufferSize
+                  << ", maxStorageBufferBindingSize=" << requiredLimits.maxStorageBufferBindingSize
+                  << std::endl;
+    }
+
     WGPURequestDeviceCallbackInfo deviceCb{};
     deviceCb.callback = handle_request_device;
     deviceCb.userdata1 = &device;
@@ -135,6 +159,16 @@ OIDN_NAMESPACE_BEGIN
       throw std::runtime_error("failed to get WebGPU device");
 
     queue = wgpuDeviceGetQueue(device);
+
+    if (isVerbose())
+    {
+      WGPULimits deviceLimits;
+      std::memset(&deviceLimits, 0, sizeof(deviceLimits));
+      if (wgpuDeviceGetLimits(device, &deviceLimits) == WGPUStatus_Success)
+        std::cout << "  DevLim  : maxBufferSize=" << deviceLimits.maxBufferSize
+                  << ", maxStorageBufferBindingSize=" << deviceLimits.maxStorageBufferBindingSize
+                  << std::endl;
+    }
 
     // HWC tensors (like Metal); OHWI weights so that input channels are
     // contiguous in memory, enabling vec4 loads in the conv kernel
