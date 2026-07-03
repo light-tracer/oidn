@@ -70,10 +70,89 @@ function makeSample(width, height) {
 function setInput(img) {
   curImage = img;
   drawRGBA($('src'), img.width, img.height, img.rgba);
+  // The output canvas is a WebGPU surface (see renderOutput); resizing clears it
   const dst = $('dst');
   dst.width = img.width; dst.height = img.height;
-  dst.getContext('2d').clearRect(0, 0, img.width, img.height);
   $('denoise').disabled = !(Module && curImage);
+}
+
+// --- display the denoised result straight from the GPU (no readback) ---
+// The wasm module publishes its device and output buffer as Module.oidnOutput;
+// a fullscreen pass reads the float3 buffer and writes sRGB to the canvas.
+const gpuView = { device: null, ctx: null, pipeline: null, paramsBuf: null };
+
+const kViewWGSL = `
+struct P { w: u32, h: u32 };
+@group(0) @binding(0) var<storage, read> img : array<f32>;
+@group(0) @binding(1) var<uniform> p : P;
+
+@vertex fn vs(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
+  var pos = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+  return vec4f(pos[vi], 0.0, 1.0);
+}
+
+fn srgb(c0: f32) -> f32 {
+  let c = clamp(c0, 0.0, 1.0);
+  if (c <= 0.0031308) { return c * 12.92; }
+  return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+}
+
+@fragment fn fs(@builtin(position) fragPos: vec4f) -> @location(0) vec4f {
+  let x = u32(fragPos.x);
+  let y = u32(fragPos.y);
+  let i = (y * p.w + x) * 3u;
+  return vec4f(srgb(img[i]), srgb(img[i + 1u]), srgb(img[i + 2u]), 1.0);
+}`;
+
+function renderOutput() {
+  const out = Module.oidnOutput;
+  if (!out) { console.error('no published output'); return; }
+  const device = out.device;
+  const canvas = $('dst');
+
+  if (gpuView.device !== device) {
+    gpuView.device = device;
+    gpuView.ctx = canvas.getContext('webgpu');
+    const format = navigator.gpu.getPreferredCanvasFormat();
+    gpuView.ctx.configure({ device, format, alphaMode: 'opaque' });
+    const module = device.createShaderModule({ code: kViewWGSL });
+    gpuView.pipeline = device.createRenderPipeline({
+      layout: 'auto',
+      vertex: { module, entryPoint: 'vs' },
+      fragment: { module, entryPoint: 'fs', targets: [{ format }] },
+    });
+    gpuView.paramsBuf = device.createBuffer({
+      size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  }
+
+  if (canvas.width !== out.width || canvas.height !== out.height) {
+    canvas.width = out.width;
+    canvas.height = out.height;
+  }
+
+  device.queue.writeBuffer(gpuView.paramsBuf, 0, new Uint32Array([out.width, out.height, 0, 0]));
+
+  const bindGroup = device.createBindGroup({
+    layout: gpuView.pipeline.getBindGroupLayout(0),
+    entries: [
+      { binding: 0, resource: { buffer: out.buffer, offset: out.offset, size: out.byteSize } },
+      { binding: 1, resource: { buffer: gpuView.paramsBuf } },
+    ],
+  });
+
+  const enc = device.createCommandEncoder();
+  const pass = enc.beginRenderPass({
+    colorAttachments: [{
+      view: gpuView.ctx.getCurrentTexture().createView(),
+      loadOp: 'clear', storeOp: 'store',
+      clearValue: { r: 0, g: 0, b: 0, a: 1 },
+    }],
+  });
+  pass.setPipeline(gpuView.pipeline);
+  pass.setBindGroup(0, bindGroup);
+  pass.draw(3);
+  pass.end();
+  device.queue.submit([enc.finish()]);
 }
 
 async function loadFile(file) {
@@ -139,35 +218,32 @@ async function denoise() {
 
     const bytes = floats.length * 4;
     const inPtr = Module._malloc(bytes);
-    const outPtr = Module._malloc(bytes);
     Module.HEAPF32.set(floats, inPtr >> 2);
 
     setStatus('denoising…');
     const t0 = performance.now();
+    // Output pointer 0: the result stays on the GPU and gets published as
+    // Module.oidnOutput for direct display (no readback)
     const ok = await Module.ccall(
       'oidnWebDenoise',
       'number',
       ['number', 'number', 'number', 'number', 'number', 'number', 'number'],
-      [width, height, inPtr, 0, 0, outPtr, hdr],
+      [width, height, inPtr, 0, 0, 0, hdr],
       { async: true });
-    const ms = performance.now() - t0;
 
     if (!ok) { setStatus('denoise failed (see console)'); }
     else {
-      const out = Module.HEAPF32.subarray(outPtr >> 2, (outPtr >> 2) + n * 3);
-      const rgbaOut = new Uint8ClampedArray(n * 4);
-      for (let i = 0; i < n; i++) {
-        rgbaOut[i * 4 + 0] = linearToSrgb(out[i * 3 + 0]) * 255;
-        rgbaOut[i * 4 + 1] = linearToSrgb(out[i * 3 + 1]) * 255;
-        rgbaOut[i * 4 + 2] = linearToSrgb(out[i * 3 + 2]) * 255;
-        rgbaOut[i * 4 + 3] = 255;
-      }
-      drawRGBA($('dst'), width, height, rgbaOut);
-      setStatus(`denoised ${width}×${height} in ${ms.toFixed(1)} ms`);
+      renderOutput(); // queue-ordered after the denoise; presents at next frame
+      const ms = performance.now() - t0;
+      setStatus(`denoised ${width}×${height}, submitted in ${ms.toFixed(1)} ms (display is GPU-direct)`);
+      // The completion signal often arrives well after the frame is already
+      // presented (Chrome scheduling), so log it instead of showing it
+      Module.oidnOutput.device.queue.onSubmittedWorkDone().then(() => {
+        console.log(`oidn: gpu completion signal after ${(performance.now() - t0).toFixed(1)} ms total`);
+      });
     }
 
     Module._free(inPtr);
-    Module._free(outPtr);
   } catch (e) {
     console.error(e);
     setStatus('error: ' + e.message);

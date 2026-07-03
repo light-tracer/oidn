@@ -90,10 +90,24 @@ Native (naga/Vulkan) is unaffected: same output hash, similar timing.
 The shim now logs upload / submit / gpu / readback separately (the readback
 number is purely the output copy + mapAsync round trip).
 
-Remaining web levers: the ~250 ms hidden-tab mapAsync floor (foreground tabs
-don't have it; consider requestAnimationFrame-aligned denoising or accepting
-it), the JS float3 conversion (~70 ms, could move into wasm or a shader), and
-everything in the native list above (the GPU work itself is the same shaders).
+**GPU-direct display (no readback).** GPU completion signals awaited by the
+wasm (buffer maps, OnSubmittedWorkDone) showed a large systematic latency in
+Chrome (~250-900 ms depending on environment) that resisted every workaround
+(future waits, JS-side maps, queue kicks, rAF heartbeats) — while the actual
+GPU work finished in tens of ms. The demo therefore does not read the result
+back at all: the shim publishes the device + output buffer JS objects to the
+page (Module.oidnOutput, via the emdawnwebgpu object table), and the page
+renders the float3 buffer straight to a WebGPU canvas with a fullscreen pass
+that applies the linear→sRGB conversion. Everything is queue-ordered, so no
+wait gates the display: a denoise call returns after submission (~6-8 ms) and
+the frame presents as soon as the GPU finishes. oidnWebDenoise still supports
+the CPU readback path when an output pointer is passed (needed e.g. for
+saving the result), which pays the completion-signal latency.
+
+Remaining web levers: the JS float3 input conversion (~40 ms at 512², could
+move into wasm or a shader), the completion-signal latency for the readback
+path (upstream Chrome/emdawnwebgpu issue worth reporting), and everything in
+the native list above (the GPU work itself is the same shaders).
 
 ## Profiling aids
 

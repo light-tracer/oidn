@@ -11,6 +11,9 @@
 // the first denoise.
 
 #include "OpenImageDenoise/oidn.hpp"
+#include "OpenImageDenoise/webgpu.h"
+#include "devices/webgpu/webgpu_buffer.h"
+#include "devices/webgpu/webgpu_device.h"
 #include <emscripten.h>
 #include <cstdio>
 #include <cstring>
@@ -18,6 +21,24 @@
 #include <vector>
 
 using namespace oidn;
+
+// Publishes the device and output buffer JS objects to the page (via the
+// emdawnwebgpu object table) so it can display the result directly from the
+// GPU — e.g. by rendering the buffer to a WebGPU canvas — without any
+// readback to the CPU.
+EM_JS(void, oidnWebPublishOutput,
+      (WGPUDevice devicePtr, WGPUBuffer bufferPtr, uint32_t byteOffset,
+       uint32_t byteSize, int width, int height),
+{
+  Module.oidnOutput = {
+    device: WebGPU.getJsObject(devicePtr),
+    buffer: WebGPU.getJsObject(bufferPtr),
+    offset: byteOffset,
+    byteSize: byteSize,
+    width: width,
+    height: height,
+  };
+});
 
 namespace {
   DeviceRef g_device;
@@ -93,8 +114,10 @@ int oidnWebSetWeights(const void* data, int byteSize)
 //
 // color/albedo/normal point at interleaved RGB float32 data in the wasm heap
 // (3 channels, row-major, top row first). albedo and normal may be null.
-// output receives RGB float32. hdr != 0 marks the color image as HDR linear.
-// Returns 1 on success, 0 on failure.
+// output receives RGB float32; it may be null, in which case the result stays
+// on the GPU and is published to JS as Module.oidnOutput (device + buffer),
+// letting the page display it directly (no readback). hdr != 0 marks the
+// color image as HDR linear. Returns 1 on success, 0 on failure.
 EMSCRIPTEN_KEEPALIVE
 int oidnWebDenoise(int width, int height,
                    const float* color, const float* albedo, const float* normal,
@@ -165,17 +188,35 @@ int oidnWebDenoise(int width, int height,
 
     const double t2 = emscripten_get_now();
 
-    // Wait for the GPU to finish, so the readback timing below only measures
-    // the copy + map round trip
-    g_device.sync();
+    if (output)
+    {
+      // CPU readback path: wait for the GPU, then map + copy
+      g_device.sync();
+      const double t3 = emscripten_get_now();
+      g_outputBuf.read(0, bytes, output);
+      const double t4 = emscripten_get_now();
+      printf("oidn: upload %.1f ms, submit %.1f ms, gpu %.1f ms, readback %.1f ms\n",
+             t1 - t0, t2 - t1, t3 - t2, t4 - t3);
+    }
+    else
+    {
+      // GPU-only path: flush the recorded graph to the queue and publish the
+      // output buffer to JS; the page renders it directly (queue-ordered), so
+      // no wait or readback is needed here
+      auto* engine = getEngine(g_device);
+      auto* dev = static_cast<WebGPUDevice*>(engine->getDevice());
+      auto* buf = dynamic_cast<WebGPUBuffer*>(
+        reinterpret_cast<Buffer*>(g_outputBuf.getHandle()));
+      if (!dev || !buf) { printf("OIDN: cannot publish output\n"); return 0; }
 
-    const double t3 = emscripten_get_now();
-
-    g_outputBuf.read(0, bytes, output);
-
-    const double t4 = emscripten_get_now();
-    printf("oidn: upload %.1f ms, submit %.1f ms, gpu %.1f ms, readback %.1f ms\n",
-           t1 - t0, t2 - t1, t3 - t2, t4 - t3);
+      engine->flush();
+      oidnWebPublishOutput(dev->device, buf->getWGPUBuffer(),
+                           uint32_t(buf->getWGPUBufferOffset()), uint32_t(bytes),
+                           width, height);
+      const double t3 = emscripten_get_now();
+      printf("oidn: upload %.1f ms, submit %.1f ms, flush+publish %.1f ms (display is async)\n",
+             t1 - t0, t2 - t1, t3 - t2);
+    }
     return 1;
   }
   catch (const std::exception& e)
