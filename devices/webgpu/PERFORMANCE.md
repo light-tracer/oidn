@@ -77,10 +77,23 @@ browser's GPU-process scheduling for hidden tabs; measured pure GPU time was
   re-reorders the weights in single-threaded wasm (~1 s).
 - `executeAsync` + blocking readback (one GPU round trip instead of two).
 
-Remaining web levers: the ~300 ms hidden-tab readback floor (consider
-requestAnimationFrame-aligned denoising or accepting it), the JS float3
-conversion (~70 ms, could move into wasm or a shader), and everything in the
-native list above (the GPU work itself is the same shaders).
+**Conv pipeline specialization (override constants).** Chrome's Dawn compiles
+WGSL through Tint → HLSL → FXC, and FXC generates very slow code for loops
+with dynamic (uniform-driven) trip counts — which is what the conv kernel's
+kh/kw/ic4 loops were. The vec4 conv pipelines are now specialized per
+(IC4, KH, KW) via pipeline-overridable constants (cached per shape, ~10
+variants for the UNet), so the loops have compile-time bounds and unroll.
+Note the first denoise pays the FXC compilation of all variants (~1.5 s,
+one-time); the shim's phase log shows it under "gpu" of the first run.
+Native (naga/Vulkan) is unaffected: same output hash, similar timing.
+
+The shim now logs upload / submit / gpu / readback separately (the readback
+number is purely the output copy + mapAsync round trip).
+
+Remaining web levers: the ~250 ms hidden-tab mapAsync floor (foreground tabs
+don't have it; consider requestAnimationFrame-aligned denoising or accepting
+it), the JS float3 conversion (~70 ms, could move into wasm or a shader), and
+everything in the native list above (the GPU work itself is the same shaders).
 
 ## Profiling aids
 

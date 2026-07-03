@@ -2,6 +2,8 @@
 #include "core/engine.h"
 #include "OpenImageDenoise/webgpu.h"
 #include "OpenImageDenoise/oidn.hpp"
+#include <array>
+#include <map>
 #include <vector>
 #include <unordered_map>
 
@@ -109,9 +111,12 @@ OIDN_NAMESPACE_BEGIN
     WGPUComputePipeline pipeline = nullptr;
 
     // Vectorized conv variant (input channels multiple of 4); shares
-    // bindGroupLayout/pipelineLayout with the scalar conv pipeline
+    // bindGroupLayout/pipelineLayout with the scalar conv pipeline. Pipelines
+    // are specialized per (IC4, KH, KW) via override constants so the loops
+    // have compile-time trip counts (crucial for Tint/FXC in browsers).
     WGPUShaderModule convVec4ShaderModule = nullptr;
-    WGPUComputePipeline convVec4Pipeline = nullptr;
+    std::map<std::array<uint32_t, 3>, WGPUComputePipeline> convVec4Pipelines;
+    WGPUComputePipeline getConvVec4Pipeline(uint32_t ic4, uint32_t kh, uint32_t kw);
 
     WGPUShaderModule upsampleShaderModule = nullptr;
     WGPUBindGroupLayout upsampleBindGroupLayout = nullptr;

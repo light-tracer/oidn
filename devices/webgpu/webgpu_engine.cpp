@@ -110,6 +110,11 @@ OIDN_NAMESPACE_BEGIN
   // Vectorized variant used when the input channel count is a multiple of 4:
   // src and weight (OHWI) are read as vec4s, and each invocation computes 4
   // consecutive output channels, amortizing the src loads.
+  //
+  // The loop bounds are pipeline-overridable constants (one pipeline per
+  // (IC4, KH, KW) combination, cached): with compile-time trip counts the
+  // loops fully unroll, which matters enormously for browsers where Tint
+  // compiles WGSL through HLSL/FXC (dynamic loops there are very slow).
   static const char* kConv2dVec4WGSL = R"wgsl(
   struct TensorF { data: array<f32>, };
   struct TensorV { data: array<vec4<f32>>, };
@@ -129,25 +134,28 @@ OIDN_NAMESPACE_BEGIN
                   pad0: u32, pad1: u32, pad2: u32, };
   @group(0) @binding(4) var<uniform> p: Params;
 
+  override IC4: u32 = 8u; // input channels / 4
+  override KH: u32 = 3u;
+  override KW: u32 = 3u;
+
   // 4 consecutive output channels (oc0..oc0+3) at conv grid position (cy, cx).
   // Out-of-range output channels are computed with clamped weight reads and
   // discarded by the caller.
   fn conv4_at(cy: i32, cx: i32, oc0: u32) -> vec4<f32> {
-    let ic4 = p.ic / 4u;
-    let wStride = p.kh * p.kw * ic4; // between consecutive output channels
+    let wStride = KH * KW * IC4; // between consecutive output channels
     var acc0: f32 = 0.0;
     var acc1: f32 = 0.0;
     var acc2: f32 = 0.0;
     var acc3: f32 = 0.0;
-    for (var ky: u32 = 0u; ky < p.kh; ky = ky + 1u) {
+    for (var ky: u32 = 0u; ky < KH; ky = ky + 1u) {
       let iy = cy + i32(ky) - i32(p.padH);
       if (iy < 0 || iy >= i32(p.ih)) { continue; }
-      for (var kx: u32 = 0u; kx < p.kw; kx = kx + 1u) {
+      for (var kx: u32 = 0u; kx < KW; kx = kx + 1u) {
         let ix = cx + i32(kx) - i32(p.padW);
         if (ix < 0 || ix >= i32(p.iw)) { continue; }
-        let sBase = (u32(iy) * p.iw + u32(ix)) * ic4;
-        let wBase = ((oc0 * p.kh + ky) * p.kw + kx) * ic4;
-        for (var i: u32 = 0u; i < ic4; i = i + 1u) {
+        let sBase = (u32(iy) * p.iw + u32(ix)) * IC4;
+        let wBase = ((oc0 * KH + ky) * KW + kx) * IC4;
+        for (var i: u32 = 0u; i < IC4; i = i + 1u) {
           let s = src.data[sBase + i];
           acc0 = acc0 + dot(s, weight.data[wBase + i]);
           acc1 = acc1 + dot(s, weight.data[wBase + wStride + i]);
@@ -262,7 +270,8 @@ OIDN_NAMESPACE_BEGIN
       wgpuShaderModuleRelease(entry.second.module);
     }
     if (dummyBuf)         wgpuBufferRelease(dummyBuf);
-    if (convVec4Pipeline)     wgpuComputePipelineRelease(convVec4Pipeline);
+    for (auto& entry : convVec4Pipelines)
+      wgpuComputePipelineRelease(entry.second);
     if (convVec4ShaderModule) wgpuShaderModuleRelease(convVec4ShaderModule);
     if (pipeline)         wgpuComputePipelineRelease(pipeline);
     if (pipelineLayout)   wgpuPipelineLayoutRelease(pipelineLayout);
@@ -418,7 +427,8 @@ OIDN_NAMESPACE_BEGIN
     cpDesc.label = { nullptr, 0 };
     pipeline = wgpuDeviceCreateComputePipeline(device->device, &cpDesc);
 
-    // Vectorized conv pipeline (same bind group layout)
+    // Vectorized conv shader module (pipelines are created on demand,
+    // specialized per conv shape; see getConvVec4Pipeline)
     WGPUShaderSourceWGSL sourceV{};
     sourceV.chain.next = nullptr;
     sourceV.chain.sType = WGPUSType_ShaderSourceWGSL;
@@ -428,17 +438,35 @@ OIDN_NAMESPACE_BEGIN
     smDescV.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&sourceV);
     smDescV.label = { nullptr, 0 };
     convVec4ShaderModule = wgpuDeviceCreateShaderModule(device->device, &smDescV);
+  }
 
-    WGPUComputePipelineDescriptor cpDescV{};
-    cpDescV.layout = pipelineLayout;
-    cpDescV.compute.module = convVec4ShaderModule;
-    cpDescV.compute.entryPoint = mainEntry;
-    cpDescV.compute.nextInChain = nullptr;
-    cpDescV.compute.constantCount = 0;
-    cpDescV.compute.constants = nullptr;
-    cpDescV.label = { nullptr, 0 };
-    convVec4Pipeline = wgpuDeviceCreateComputePipeline(device->device, &cpDescV);
+  WGPUComputePipeline WebGPUEngine::getConvVec4Pipeline(uint32_t ic4, uint32_t kh, uint32_t kw)
+  {
+    const std::array<uint32_t, 3> key = {ic4, kh, kw};
+    auto it = convVec4Pipelines.find(key);
+    if (it != convVec4Pipelines.end())
+      return it->second;
 
+    initPipeline(); // make sure the shader module and layout exist
+
+    WGPUConstantEntry constants[3] = {};
+    constants[0].key = { "IC4", WGPU_STRLEN }; constants[0].value = double(ic4);
+    constants[1].key = { "KH",  WGPU_STRLEN }; constants[1].value = double(kh);
+    constants[2].key = { "KW",  WGPU_STRLEN }; constants[2].value = double(kw);
+
+    WGPUComputePipelineDescriptor cpDesc{};
+    cpDesc.layout = pipelineLayout;
+    cpDesc.compute.module = convVec4ShaderModule;
+    WGPUStringView mainEntry{ "main", WGPU_STRLEN };
+    cpDesc.compute.entryPoint = mainEntry;
+    cpDesc.compute.nextInChain = nullptr;
+    cpDesc.compute.constantCount = 3;
+    cpDesc.compute.constants = constants;
+    cpDesc.label = { nullptr, 0 };
+    WGPUComputePipeline newPipeline = wgpuDeviceCreateComputePipeline(device->device, &cpDesc);
+
+    convVec4Pipelines.emplace(key, newPipeline);
+    return newPipeline;
   }
 
   void WebGPUEngine::initUpsamplePipeline()
@@ -859,10 +887,12 @@ OIDN_NAMESPACE_BEGIN
     // The vectorized kernel requires the input channel count to be a multiple
     // of 4 (which holds for all interior UNet layers)
     const bool useVec4 = (src.c % 4 == 0);
+    WGPUComputePipeline convPipeline =
+      useVec4 ? getConvVec4Pipeline(src.c / 4, weight.h, weight.w) : pipeline;
 
     WGPUCommandEncoder enc = getEncoder();
     WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(enc, nullptr);
-    wgpuComputePassEncoderSetPipeline(pass, useVec4 ? convVec4Pipeline : pipeline);
+    wgpuComputePassEncoderSetPipeline(pass, convPipeline);
     wgpuComputePassEncoderSetBindGroup(pass, 0, bg, 0, nullptr);
     wgpuComputePassEncoderDispatchWorkgroups(pass, (dst.w+7)/8, (dst.h+7)/8, (dst.c+3)/4);
     wgpuComputePassEncoderEnd(pass);

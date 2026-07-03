@@ -160,18 +160,22 @@ int oidnWebDenoise(int width, int height,
 
     const double t1 = emscripten_get_now();
 
-    // Async: the blocking readback below waits for completion anyway, so this
-    // avoids one extra GPU round trip
     g_filter.executeAsync();
     if (!checkError("execute")) return 0;
 
     const double t2 = emscripten_get_now();
 
-    g_outputBuf.read(0, bytes, output);
+    // Wait for the GPU to finish, so the readback timing below only measures
+    // the copy + map round trip
+    g_device.sync();
 
     const double t3 = emscripten_get_now();
-    printf("oidn: upload %.1f ms, execute %.1f ms, readback %.1f ms\n",
-           t1 - t0, t2 - t1, t3 - t2);
+
+    g_outputBuf.read(0, bytes, output);
+
+    const double t4 = emscripten_get_now();
+    printf("oidn: upload %.1f ms, submit %.1f ms, gpu %.1f ms, readback %.1f ms\n",
+           t1 - t0, t2 - t1, t3 - t2, t4 - t3);
     return 1;
   }
   catch (const std::exception& e)
