@@ -3,6 +3,9 @@
 #include "webgpu_engine.h"
 #include "webgpu_heap.h"
 #include <cstring>
+#if defined(__EMSCRIPTEN__)
+  #include <emscripten.h>
+#endif
 
 OIDN_NAMESPACE_BEGIN
 
@@ -69,9 +72,17 @@ OIDN_NAMESPACE_BEGIN
     // Make sure any pending compute work producing this buffer is submitted
     engine->flush();
 
+  #if defined(__EMSCRIPTEN__) && defined(OIDN_WEBGPU_READ_TRACE)
+    const double rt0 = emscripten_get_now();
+  #endif
+
     auto* dev = static_cast<WebGPUDevice*>(engine->getDevice());
     WGPUBuffer readback = dev->createBuffer(byteSize,
                                  WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
+
+  #if defined(__EMSCRIPTEN__) && defined(OIDN_WEBGPU_READ_TRACE)
+    const double rt1 = emscripten_get_now();
+  #endif
 
     WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(dev->device, nullptr);
     wgpuCommandEncoderCopyBufferToBuffer(enc, buffer, this->byteOffset + byteOffset, readback, 0, byteSize);
@@ -79,6 +90,10 @@ OIDN_NAMESPACE_BEGIN
     dev->submit(cmd);
     wgpuCommandBufferRelease(cmd);
     wgpuCommandEncoderRelease(enc);
+
+  #if defined(__EMSCRIPTEN__) && defined(OIDN_WEBGPU_READ_TRACE)
+    const double rt2 = emscripten_get_now();
+  #endif
 
     bool done = false;
     auto callback = [](WGPUMapAsyncStatus status, WGPUStringView, void* userdata1, void*)
@@ -100,11 +115,22 @@ OIDN_NAMESPACE_BEGIN
   #endif
     if (!done)
       throw std::runtime_error("failed to map WebGPU readback buffer");
+
+  #if defined(__EMSCRIPTEN__) && defined(OIDN_WEBGPU_READ_TRACE)
+    const double rt3 = emscripten_get_now();
+  #endif
+
     // Note: must be the const variant; GetMappedRange fails on read-mapped
     // buffers in Dawn/emdawnwebgpu
     std::memcpy(dstHostPtr, wgpuBufferGetConstMappedRange(readback,0,byteSize), byteSize);
     wgpuBufferUnmap(readback);
     wgpuBufferRelease(readback);
+
+  #if defined(__EMSCRIPTEN__) && defined(OIDN_WEBGPU_READ_TRACE)
+    const double rt4 = emscripten_get_now();
+    printf("oidn read: alloc %.1f, submit %.1f, mapWait %.1f, copy %.1f ms (%zu bytes)\n",
+           rt1 - rt0, rt2 - rt1, rt3 - rt2, rt4 - rt3, byteSize);
+  #endif
   }
 
   void WebGPUBuffer::write(size_t byteOffset, size_t byteSize, const void* srcHostPtr, SyncMode)

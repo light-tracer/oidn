@@ -42,6 +42,11 @@ target_link_libraries(OpenImageDenoise_device_webgpu PRIVATE OpenImageDenoise_co
 # The unit tests link against internal engine/arena symbols
 oidn_export_all_symbols(OpenImageDenoise_device_webgpu)
 
+if(EMSCRIPTEN)
+  # Fine-grained readback phase timing in the browser console (diagnostic)
+  target_compile_definitions(OpenImageDenoise_device_webgpu PRIVATE OIDN_WEBGPU_READ_TRACE)
+endif()
+
 if(OIDN_STATIC_LIB)
   oidn_install_static_module(OpenImageDenoise_device_webgpu)
   target_link_libraries(OpenImageDenoise PRIVATE OpenImageDenoise_device_webgpu)
