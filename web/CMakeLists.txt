@@ -30,6 +30,10 @@ target_link_options(oidn_web PRIVATE
   # The denoiser allocates sizeable GPU staging/host buffers on demand
   "-sALLOW_MEMORY_GROWTH=1"
   "-sINITIAL_MEMORY=134217728"
+  # In browsers with resizable-ArrayBuffer support, growable wasm memory makes
+  # TextDecoder.decode() throw on heap views ("value must not be resizable",
+  # hit in emdawnwebgpu's WGSL string handling); use classic memory growth
+  "-sGROWABLE_ARRAYBUFFERS=0"
   # A loadable ES-ish module with a named factory
   "-sMODULARIZE=1"
   "-sEXPORT_NAME=createOIDN"
