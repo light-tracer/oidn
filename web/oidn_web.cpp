@@ -11,45 +11,11 @@
 // the first denoise.
 
 #include "OpenImageDenoise/oidn.hpp"
-#include "OpenImageDenoise/webgpu.h"
-#include "devices/webgpu/webgpu_buffer.h"
-#include "devices/webgpu/webgpu_device.h"
 #include <emscripten.h>
 #include <cstdio>
 #include <cstring>
 #include <exception>
 #include <vector>
-
-// Reads back a GPU buffer via plain JS WebGPU calls. Buffer maps awaited
-// through the C API's WaitAny path resolve suspiciously slowly in Chrome
-// (~250-450 ms vs ~5 ms for identical maps awaited from JS), so the output
-// readback goes through this JS helper instead. The readback buffer is cached
-// on the Module object and grown as needed.
-EM_ASYNC_JS(void, oidnWebJsReadback,
-            (WGPUDevice devicePtr, WGPUBuffer bufferPtr, uint32_t srcOffset,
-             uint32_t byteSize, void* dstPtr),
-{
-  const device = WebGPU.getJsObject(devicePtr);
-  const src = WebGPU.getJsObject(bufferPtr);
-
-  if (!Module.oidnReadbackBuf || Module.oidnReadbackSize < byteSize) {
-    if (Module.oidnReadbackBuf) Module.oidnReadbackBuf.destroy();
-    Module.oidnReadbackBuf = device.createBuffer({
-      size: byteSize,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
-    });
-    Module.oidnReadbackSize = byteSize;
-  }
-  const rb = Module.oidnReadbackBuf;
-
-  const enc = device.createCommandEncoder();
-  enc.copyBufferToBuffer(src, srcOffset, rb, 0, byteSize);
-  device.queue.submit([enc.finish()]);
-
-  await rb.mapAsync(GPUMapMode.READ, 0, byteSize);
-  HEAPU8.set(new Uint8Array(rb.getMappedRange(0, byteSize)), dstPtr);
-  rb.unmap();
-});
 
 using namespace oidn;
 
@@ -199,33 +165,17 @@ int oidnWebDenoise(int width, int height,
 
     const double t2 = emscripten_get_now();
 
-    // Read the output back through JS (see oidnWebJsReadback). The readback
-    // copy is queue-ordered after the graph, and its map wait is awaited from
-    // JS, so no explicit device sync is needed (and GPU completions awaited
-    // through the C API's future path have shown large extra latency in
-    // Chrome, so we deliberately avoid them on the hot path).
-    {
-      auto* engine = getEngine(g_device);
-      auto* dev = static_cast<WebGPUDevice*>(engine->getDevice());
-      auto* buf = dynamic_cast<WebGPUBuffer*>(
-        reinterpret_cast<Buffer*>(g_outputBuf.getHandle()));
-      if (dev && buf)
-      {
-        // Flush any recorded but unsubmitted work first
-        engine->flush();
-        oidnWebJsReadback(dev->device, buf->getWGPUBuffer(),
-                          uint32_t(buf->getWGPUBufferOffset()), uint32_t(bytes), output);
-      }
-      else
-      {
-        g_device.sync();
-        g_outputBuf.read(0, bytes, output); // fallback
-      }
-    }
+    // Wait for the GPU to finish, so the readback timing below only measures
+    // the copy + map round trip
+    g_device.sync();
 
     const double t3 = emscripten_get_now();
-    printf("oidn: upload %.1f ms, submit %.1f ms, gpu+readback %.1f ms\n",
-           t1 - t0, t2 - t1, t3 - t2);
+
+    g_outputBuf.read(0, bytes, output);
+
+    const double t4 = emscripten_get_now();
+    printf("oidn: upload %.1f ms, submit %.1f ms, gpu %.1f ms, readback %.1f ms\n",
+           t1 - t0, t2 - t1, t3 - t2, t4 - t3);
     return 1;
   }
   catch (const std::exception& e)

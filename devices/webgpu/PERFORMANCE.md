@@ -87,19 +87,8 @@ Note the first denoise pays the FXC compilation of all variants (~1.5 s,
 one-time); the shim's phase log shows it under "gpu" of the first run.
 Native (naga/Vulkan) is unaffected: same output hash, similar timing.
 
-**JS-side output readback.** Buffer maps awaited from the wasm through the
-C API future path (wgpuBufferMapAsync + wgpuInstanceWaitAny) showed a large
-systematic extra latency in Chrome (~250-450 ms), while byte-identical
-mapAsync calls awaited from plain JS on the same device resolve in ~5 ms.
-Verified with prototype-patch tracing: the promise itself resolves late; the
-main thread is idle; args/buffer/device are identical. The output readback
-therefore goes through an EM_ASYNC_JS helper (web/oidn_web.cpp:
-oidnWebJsReadback) that copies to a cached MAP_READ buffer, awaits the map in
-JS, and writes into the wasm heap. The explicit device sync before the read
-was removed too (queue ordering makes it redundant, and OnSubmittedWorkDone
-awaited via the future path exhibits the same latency issue).
-
-The shim logs upload / submit / gpu+readback phases to the console.
+The shim now logs upload / submit / gpu / readback separately (the readback
+number is purely the output copy + mapAsync round trip).
 
 Remaining web levers: the ~250 ms hidden-tab mapAsync floor (foreground tabs
 don't have it; consider requestAnimationFrame-aligned denoising or accepting

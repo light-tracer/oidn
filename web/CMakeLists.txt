@@ -10,9 +10,7 @@ endif()
 
 add_executable(oidn_web oidn_web.cpp)
 
-target_link_libraries(oidn_web PRIVATE OpenImageDenoise wgpu_native)
-# The JS readback helper reaches into the WebGPU device internals
-target_include_directories(oidn_web PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR})
+target_link_libraries(oidn_web PRIVATE OpenImageDenoise)
 
 # Exported C functions callable from JS (leading underscore is the wasm symbol)
 set(OIDN_WEB_EXPORTS
