@@ -19,6 +19,7 @@ OIDN_NAMESPACE_BEGIN
     size_t     offset;
     uint32_t   n, c, h, w;
     WebGPUTensorType type;
+    uint32_t   elemByteSize = 4; // 4 = f32, 2 = f16
   };
 
   // Parameters for the generalized conv2d kernel (see kConv2dWGSL)

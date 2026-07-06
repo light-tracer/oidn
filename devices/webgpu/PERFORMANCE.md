@@ -10,7 +10,8 @@ steady-state (after warm-up), matching the CPU backend to RMSE ~1e-6.
 | Naive scalar conv, one queue submit per op | 1160 ms | |
 | OHWI weights + vec4 conv (4 out-channels/thread) | 225 ms | |
 | Coalesced (channel-innermost) pool/upsample | 206 ms | |
-| Single command buffer + pipeline cache | **21 ms** | current |
+| Single command buffer + pipeline cache | 21 ms | |
+| Fused conv+pool, uniform-buffer arena | **~19 ms** | current (best of N; run-to-run variance 19-48 ms) |
 
 The CPU backend (20-thread i7-12700K) does the same denoise in ~63 ms, so the
 WebGPU backend is ~3× faster on this machine as of the last measurement.
@@ -38,6 +39,34 @@ WebGPU backend is ~3× faster on this machine as of the last measurement.
   pressure; measured *slower* than the plain vec4 kernel.
 - **16×8 workgroups** for conv. 8×8 is faster on the 3060.
 
+## Implemented since (from the former "ideas" list)
+
+- **Fused conv+pool.** `isConvSupported` now accepts `PostOp::Pool`, so the
+  graph builder emits single fused conv+pool ops (the kernel already had the
+  `postOp` path): ~4 fewer dispatches and their full-resolution intermediate
+  tensors. Fused upsampling stays off — it would recompute each conv result 4×.
+  Correctness covered in `test_webgpu_conv.cpp` (fused vs. plain conv + host
+  maxpool).
+- **Uniform-buffer arena.** Per-dispatch uniform create/release replaced by a
+  256 KB bump arena written with `wgpuQueueWriteBuffer`
+  (`WebGPUEngine::allocUniform`); slots recycle on wrap-around, which is safe
+  because writes are queue-ordered.
+- **f16 tensors and weights.** All tensor/weight kernels are WGSL templates
+  instantiated for f32 or f16 (`specializeWGSL`, `$T$` placeholder, f32
+  accumulation in the conv). When the adapter reports `shader-f16` the device
+  requests it and switches `tensorDataType`/`weightDataType` to Float16 —
+  halving the bandwidth of the whole network; otherwise everything stays f32
+  (same output hash as before, so the refactor is neutral).
+  **Caveat:** wgpu-native never exposes SHADER_F16 on NVIDIA Vulkan (wgpu
+  gates it on `storageInputOutput16`, which NVIDIA doesn't implement) and its
+  DX12 backend would need DXC. So natively this machine runs f32; in Chrome
+  (Dawn, DXC) f16 is active — verified LDR + HDR on the demo page, correct
+  output. Buffer/binding/copy byte sizes are rounded up to 4 everywhere
+  (`roundByteSize4`) because f16 regions can be 2-aligned only (e.g. the
+  3-channel bias of the last conv); WebGPU requires multiples of 4.
+  The instance now prefers the Vulkan backend natively (with fallback) to
+  maximize the chance of f16 on non-NVIDIA GPUs.
+
 ## Ideas not yet tried (rough expected payoff)
 
 - **Shared-memory / workgroup tiled conv.** The conv kernel currently reads src
@@ -46,19 +75,6 @@ WebGPU backend is ~3× faster on this machine as of the last measurement.
   (stage an input tile + the 3×3 weights into `var<workgroup>` and reuse across
   the workgroup) is the highest-upside remaining lever. Could plausibly get the
   denoise into the sub-10 ms range.
-- **f16 weights and tensors.** OIDN's other GPU backends denoise in half
-  precision. Halves bandwidth (the bottleneck) and enables `shader-f16`.
-  Requires the `shader-f16` feature (widely available) and packing weights as
-  f16; the network tolerates it (that is what the .tza large weights are).
-- **Fused conv post-ops.** The conv kernel already implements fused
-  Pool/Upsample (`postOp` field), but `WebGPUEngine::isConvSupported` still
-  reports `None` only, so the graph builder splits every pooled/upsampled conv
-  into two ops (two dispatches, an extra intermediate tensor). Overriding
-  `isConvSupported` to accept `Pool`/`Upsample` would remove ~8 dispatches and
-  their intermediates. Needs a fused-conv correctness test first.
-- **Persistent per-op uniform buffers.** Every dispatch allocates a small
-  uniform buffer for its params and releases it. Pooling/reusing these would
-  cut allocator churn (minor, but free).
 - **1×1 conv fast path.** The 1×1 convs (none in the default RT UNet, but used
   by some models) degenerate to a matmul and could use a wider tiling.
 

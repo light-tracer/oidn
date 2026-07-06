@@ -12,7 +12,7 @@ OIDN_NAMESPACE_BEGIN
     : OutputProcess(desc), engine(engine) {}
 
   static const char* kWGSL = R"wgsl(
-  struct Tensor { data: array<f32>, };
+  struct Tensor { data: array<$T$>, };
   struct Image { data: array<f32>, };
   struct Params {
     h:u32,
@@ -87,9 +87,9 @@ OIDN_NAMESPACE_BEGIN
     let w = gid.x;
     if (h >= params.h || w >= params.w) { return; }
     let base = ((h*params.w + w)*params.srcC);
-    var value = vec3<f32>(src.data[base],
-                          select(src.data[base], src.data[base+1u], params.srcC > 1u),
-                          select(src.data[base], src.data[base+2u], params.srcC > 2u));
+    var value = vec3<f32>(f32(src.data[base]),
+                          f32(select(src.data[base], src.data[base+1u], params.srcC > 1u)),
+                          f32(select(src.data[base], src.data[base+2u], params.srcC > 2u)));
     value = sanitize(value, 0.0, 3.4e38);
     value = tf_inverse(value);
     if (params.dstC == 1u) {
@@ -140,18 +140,19 @@ OIDN_NAMESPACE_BEGIN
     } params = { (uint32_t)H,(uint32_t)W,(uint32_t)C,(uint32_t)dstC,(uint32_t)transferFunc->getType(),
                  transferFunc->getOutputScale(), transferFunc->normScale, transferFunc->rcpNormScale,
                  hdr?1u:0u, snorm?1u:0u };
-    WGPUBuffer paramsBuf = dev->createBuffer(sizeof(Params),
-                          WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst,
-                          &params);
+    const WebGPUEngine::UniformSlot paramsSlot = engine->allocUniform(&params, sizeof(Params));
 
-    const auto& cp = engine->getPipeline(kWGSL,
+    const bool f16 = srcDesc.dataType == DataType::Float16;
+    const uint32_t elem = f16 ? 2u : 4u;
+    const auto& cp = engine->getPipeline(f16 ? "output_process:f16" : "output_process:f32",
+      WebGPUEngine::specializeWGSL(kWGSL, f16),
       {WGPUBufferBindingType_Storage, WGPUBufferBindingType_Storage,
        WGPUBufferBindingType_Uniform});
 
     WGPUBindGroupEntry bgEntries[3] = {};
-    bgEntries[0].binding = 0; bgEntries[0].buffer = sb->getWGPUBuffer(); bgEntries[0].offset = sb->getWGPUBufferOffset() + src->getByteOffset(); bgEntries[0].size = size_t(C)*H*W*sizeof(float);
+    bgEntries[0].binding = 0; bgEntries[0].buffer = sb->getWGPUBuffer(); bgEntries[0].offset = sb->getWGPUBufferOffset() + src->getByteOffset(); bgEntries[0].size = roundByteSize4(size_t(C)*H*W*elem);
     bgEntries[1].binding = 1; bgEntries[1].buffer = dstAcc.getWGPUBuffer(); bgEntries[1].offset = dstAcc.getOffset(); bgEntries[1].size = outSize;
-    bgEntries[2].binding = 2; bgEntries[2].buffer = paramsBuf; bgEntries[2].size = sizeof(Params);
+    bgEntries[2].binding = 2; bgEntries[2].buffer = paramsSlot.buffer; bgEntries[2].offset = paramsSlot.offset; bgEntries[2].size = sizeof(Params);
 
     WGPUBindGroupDescriptor bgDesc{};
     bgDesc.layout = cp.bindGroupLayout;
@@ -170,7 +171,6 @@ OIDN_NAMESPACE_BEGIN
     dstAcc.finish();
 
     wgpuBindGroupRelease(bg);
-    wgpuBufferRelease(paramsBuf);
   }
 
 OIDN_NAMESPACE_END

@@ -4,6 +4,7 @@
 #include "OpenImageDenoise/oidn.hpp"
 #include <array>
 #include <map>
+#include <string>
 #include <vector>
 #include <unordered_map>
 
@@ -14,6 +15,14 @@ OIDN_NAMESPACE_BEGIN
   class WebGPUOutputProcess;
   class WebGPUImageCopy;
   class WebGPUAutoexposure;
+
+  // WebGPU requires buffer sizes, copy/map sizes and storage binding sizes to
+  // be multiples of 4 bytes. f16 tensor regions can be 2-aligned only (e.g. a
+  // 3-channel bias), so such sizes must be rounded up.
+  inline size_t roundByteSize4(size_t byteSize)
+  {
+    return (byteSize + 3) & ~size_t(3);
+  }
 
   class WebGPUEngine : public Engine
   {
@@ -29,6 +38,12 @@ OIDN_NAMESPACE_BEGIN
     Ref<Buffer> newBuffer(size_t byteSize, Storage storage) override;
     Ref<Buffer> newBuffer(void* ptr, size_t byteSize) override;
     Ref<Buffer> newBuffer(const Ref<Arena>& arena, size_t byteSize, size_t byteOffset) override;
+
+    // The conv kernel implements fused 2x2 max pooling (same total conv work,
+    // but skips the intermediate full-resolution tensor and the pool
+    // dispatch). Fused upsampling is implemented too but not advertised: it
+    // would recompute each conv result 4 times.
+    bool isConvSupported(PostOp postOp) override;
 
     Ref<Conv> newConv(const ConvDesc& desc) override;
     Ref<Pool> newPool(const PoolDesc& desc) override;
@@ -58,6 +73,16 @@ OIDN_NAMESPACE_BEGIN
     // the bias aliases dst)
     WGPUBuffer getDummyBuffer();
 
+    // Bump-allocates a slot in a shared uniform buffer and writes the given
+    // params into it (queue-ordered, so recycling slots on wrap-around cannot
+    // race in-flight dispatches). Replaces a per-dispatch create/release.
+    struct UniformSlot
+    {
+      WGPUBuffer buffer;
+      size_t offset;
+    };
+    UniformSlot allocUniform(const void* data, size_t byteSize);
+
     void upsample2x(const WebGPUTensor& src,
                     const WebGPUTensor& dst);
 
@@ -83,8 +108,8 @@ OIDN_NAMESPACE_BEGIN
     WGPUCommandEncoder getEncoder();
     void flush();
 
-    // Cached compute pipeline for ops with static WGSL sources (keyed by the
-    // source pointer). bindingTypes describes the buffer bindings in order.
+    // Cached compute pipeline for ops with (possibly specialized) WGSL
+    // sources. bindingTypes describes the buffer bindings in order.
     struct CachedPipeline
     {
       WGPUShaderModule module = nullptr;
@@ -92,41 +117,27 @@ OIDN_NAMESPACE_BEGIN
       WGPUPipelineLayout pipelineLayout = nullptr;
       WGPUComputePipeline pipeline = nullptr;
     };
-    const CachedPipeline& getPipeline(const char* code,
+    const CachedPipeline& getPipeline(const std::string& key, const std::string& code,
                                       std::initializer_list<WGPUBufferBindingType> bindingTypes);
 
+    // Instantiates a WGSL kernel template for f32 or f16 tensors: replaces the
+    // $T$ placeholder with the element type, and prepends 'enable f16;' when
+    // needed. Kernels accumulate in f32 in both variants.
+    static std::string specializeWGSL(const char* tmpl, bool f16);
+
   private:
-    void initPipeline();
-    void initUpsamplePipeline();
-    void initPoolPipeline();
     void initAddPipeline();
     void initMulPipeline();
     void initSoftplusPipeline();
 
     WebGPUDevice* device;
 
-    WGPUShaderModule shaderModule = nullptr;
-    WGPUBindGroupLayout bindGroupLayout = nullptr;
-    WGPUPipelineLayout pipelineLayout = nullptr;
-    WGPUComputePipeline pipeline = nullptr;
-
-    // Vectorized conv variant (input channels multiple of 4); shares
-    // bindGroupLayout/pipelineLayout with the scalar conv pipeline. Pipelines
-    // are specialized per (IC4, KH, KW) via override constants so the loops
+    // Vectorized conv variant (input channels multiple of 4). Pipelines are
+    // specialized per (IC4, KH, KW, dtype) via override constants so the loops
     // have compile-time trip counts (crucial for Tint/FXC in browsers).
-    WGPUShaderModule convVec4ShaderModule = nullptr;
-    std::map<std::array<uint32_t, 3>, WGPUComputePipeline> convVec4Pipelines;
-    WGPUComputePipeline getConvVec4Pipeline(uint32_t ic4, uint32_t kh, uint32_t kw);
-
-    WGPUShaderModule upsampleShaderModule = nullptr;
-    WGPUBindGroupLayout upsampleBindGroupLayout = nullptr;
-    WGPUPipelineLayout upsamplePipelineLayout = nullptr;
-    WGPUComputePipeline upsamplePipeline = nullptr;
-
-    WGPUShaderModule poolShaderModule = nullptr;
-    WGPUBindGroupLayout poolBindGroupLayout = nullptr;
-    WGPUPipelineLayout poolPipelineLayout = nullptr;
-    WGPUComputePipeline poolPipeline = nullptr;
+    WGPUShaderModule convVec4Modules[2] = {nullptr, nullptr}; // [f32, f16]
+    std::map<std::array<uint32_t, 4>, WGPUComputePipeline> convVec4Pipelines;
+    WGPUComputePipeline getConvVec4Pipeline(uint32_t ic4, uint32_t kh, uint32_t kw, bool f16);
 
     WGPUShaderModule addShaderModule = nullptr;
     WGPUBindGroupLayout addBindGroupLayout = nullptr;
@@ -145,7 +156,11 @@ OIDN_NAMESPACE_BEGIN
 
     WGPUBuffer dummyBuf = nullptr;
     WGPUCommandEncoder pendingEncoder = nullptr;
-    std::unordered_map<const char*, CachedPipeline> pipelineCache;
+
+    static constexpr size_t uniformArenaByteSize = 256 * 1024;
+    WGPUBuffer uniformArena = nullptr;
+    size_t uniformArenaOffset = 0;
+    std::unordered_map<std::string, CachedPipeline> pipelineCache;
 
     struct PendingReadback
     {

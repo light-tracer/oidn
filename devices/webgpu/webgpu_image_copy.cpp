@@ -45,18 +45,16 @@ OIDN_NAMESPACE_BEGIN
     )wgsl";
 
     struct Size { uint32_t h,w; } size = { (uint32_t)H, (uint32_t)W };
-    WGPUBuffer sizeBuf = dev->createBuffer(sizeof(Size),
-                        WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst,
-                        &size);
+    const WebGPUEngine::UniformSlot sizeSlot = engine->allocUniform(&size, sizeof(Size));
 
-    const auto& cp = engine->getPipeline(kWGSL,
+    const auto& cp = engine->getPipeline("image_copy", kWGSL,
       {WGPUBufferBindingType_Storage, WGPUBufferBindingType_Storage,
        WGPUBufferBindingType_Uniform});
 
     WGPUBindGroupEntry bgEntries[3] = {};
     bgEntries[0].binding = 0; bgEntries[0].buffer = srcAcc.getWGPUBuffer(); bgEntries[0].offset = srcAcc.getOffset(); bgEntries[0].size = byteSize;
     bgEntries[1].binding = 1; bgEntries[1].buffer = dstAcc.getWGPUBuffer(); bgEntries[1].offset = dstAcc.getOffset(); bgEntries[1].size = byteSize;
-    bgEntries[2].binding = 2; bgEntries[2].buffer = sizeBuf; bgEntries[2].size = sizeof(Size);
+    bgEntries[2].binding = 2; bgEntries[2].buffer = sizeSlot.buffer; bgEntries[2].offset = sizeSlot.offset; bgEntries[2].size = sizeof(Size);
     WGPUBindGroupDescriptor bgDesc{};
     bgDesc.layout = cp.bindGroupLayout;
     bgDesc.entryCount = 3;
@@ -74,7 +72,6 @@ OIDN_NAMESPACE_BEGIN
     dstAcc.finish();
 
     wgpuBindGroupRelease(bg);
-    wgpuBufferRelease(sizeBuf);
   }
 
 OIDN_NAMESPACE_END

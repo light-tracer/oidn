@@ -43,18 +43,20 @@ OIDN_NAMESPACE_BEGIN
       throw std::invalid_argument("unsupported convolution postop");
     }
 
+    const uint32_t elem = srcDesc.dataType == DataType::Float16 ? 2u : 4u;
+
     WebGPUTensor A  = {sb->getWGPUBuffer(), sb->getWGPUBufferOffset() + srcDev->getByteOffset(), 1,
-                       (uint32_t)srcDesc.getC(), (uint32_t)srcDesc.getH(), (uint32_t)srcDesc.getW(), WebGPUTensorType::Input};
+                       (uint32_t)srcDesc.getC(), (uint32_t)srcDesc.getH(), (uint32_t)srcDesc.getW(), WebGPUTensorType::Input, elem};
     WebGPUTensor Wt = {wb->getWGPUBuffer(), wb->getWGPUBufferOffset() + weightDev->getByteOffset(), (uint32_t)weightDesc.getO(),
-                       (uint32_t)weightDesc.getI(), (uint32_t)weightDesc.getH(), (uint32_t)weightDesc.getW(), WebGPUTensorType::Const};
+                       (uint32_t)weightDesc.getI(), (uint32_t)weightDesc.getH(), (uint32_t)weightDesc.getW(), WebGPUTensorType::Const, elem};
     WebGPUTensor O  = {ob->getWGPUBuffer(), ob->getWGPUBufferOffset() + dstDev->getByteOffset(), 1,
-                       (uint32_t)dstDesc.getC(), (uint32_t)dstDesc.getH(), (uint32_t)dstDesc.getW(), WebGPUTensorType::Output};
+                       (uint32_t)dstDesc.getC(), (uint32_t)dstDesc.getH(), (uint32_t)dstDesc.getW(), WebGPUTensorType::Output, elem};
 
     WebGPUTensor B;
     if (biasDesc.getRank() == 1)
     {
       params.biasMode = 0;
-      B = {bb->getWGPUBuffer(), bb->getWGPUBufferOffset() + biasDev->getByteOffset(), (uint32_t)biasDesc.getX(), 1, 1, 1, WebGPUTensorType::Const};
+      B = {bb->getWGPUBuffer(), bb->getWGPUBufferOffset() + biasDev->getByteOffset(), (uint32_t)biasDesc.getX(), 1, 1, 1, WebGPUTensorType::Const, elem};
     }
     else // rank 3: full-tensor bias with the same shape as dst
     {
@@ -69,13 +71,13 @@ OIDN_NAMESPACE_BEGIN
         // binding to respect WebGPU buffer aliasing rules, and bind a dummy
         // buffer in the bias slot
         params.biasMode = 2;
-        B = {engine->getDummyBuffer(), 0, 1, 1, 1, 1, WebGPUTensorType::Const};
+        B = {engine->getDummyBuffer(), 0, 1, 1, 1, 1, WebGPUTensorType::Const, elem};
       }
       else
       {
         params.biasMode = 1;
         B = {bb->getWGPUBuffer(), bb->getWGPUBufferOffset() + biasDev->getByteOffset(), 1,
-             (uint32_t)biasDesc.getC(), (uint32_t)biasDesc.getH(), (uint32_t)biasDesc.getW(), WebGPUTensorType::Const};
+             (uint32_t)biasDesc.getC(), (uint32_t)biasDesc.getH(), (uint32_t)biasDesc.getW(), WebGPUTensorType::Const, elem};
       }
     }
 

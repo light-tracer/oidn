@@ -177,5 +177,39 @@ TEST(WebGPU, Conv2d)
   // Relative tolerance: the CPU reference path uses half-precision weights
   for(size_t i=0;i<OC*OH*OW;++i)
     ASSERT_NEAR(out[i], ref[i], 2e-4f * std::max(1.f, std::abs(ref[i])));
+
+  // --- fused conv + 2x2 max pooling: compare against maxpool of the plain
+  // conv output verified above ---
+  {
+    constexpr uint32_t PH = OH/2, PW = OW/2;
+    auto poolBuf = dev.newBuffer(size_t(OC)*PH*PW*sizeof(float));
+
+    auto fused = eng->newConv({srcDescGPU, wDescGPU, bDescGPU, Activation::ReLU, PostOp::Pool, false});
+    fused->setSrc(srcTensorGPU);
+    fused->setWeight(wTensorGPU);
+    fused->setBias(bTensorGPU);
+    auto poolDesc = fused->getDstDesc();
+    ASSERT_EQ(poolDesc.getH(), int(PH));
+    ASSERT_EQ(poolDesc.getW(), int(PW));
+    auto poolTensor = eng->Engine::newTensor(Ref<Buffer>(reinterpret_cast<Buffer*>(poolBuf.getHandle())), poolDesc);
+    fused->setDst(poolTensor);
+    fused->submit(nullptr);
+    dev.sync();
+
+    float outPool[OC*PH*PW];
+    poolBuf.read(0, sizeof(outPool), outPool);
+
+    for(uint32_t y=0;y<PH;++y)
+      for(uint32_t x=0;x<PW;++x)
+        for(uint32_t c=0;c<OC;++c)
+        {
+          // reference: maxpool of the verified plain conv output (chw layout in `out`)
+          const float m = std::max(
+            std::max(out[(size_t)c*OH*OW + (2*y)*OW + 2*x],   out[(size_t)c*OH*OW + (2*y)*OW + 2*x+1]),
+            std::max(out[(size_t)c*OH*OW + (2*y+1)*OW + 2*x], out[(size_t)c*OH*OW + (2*y+1)*OW + 2*x+1]));
+          const float v = outPool[(y*PW + x)*OC + c];
+          ASSERT_NEAR(v, m, 2e-4f * std::max(1.f, std::abs(m))) << "at " << x << "," << y << "," << c;
+        }
+  }
 }
 

@@ -14,7 +14,7 @@ OIDN_NAMESPACE_BEGIN
 
   static const char* kWGSL = R"wgsl(
   struct Image { data: array<f32>, };
-  struct Tensor { data: array<f32>, };
+  struct Tensor { data: array<$T$>, };
   struct Params {
     h:u32,
     w:u32,
@@ -106,9 +106,9 @@ OIDN_NAMESPACE_BEGIN
     value = tf_forward(value);
 
     var dstIdx = ((h*params.w + w)*params.c);
-    dst.data[dstIdx] = value.x;
-    if (params.c > 1u) { dst.data[dstIdx+1u] = value.y; }
-    if (params.c > 2u) { dst.data[dstIdx+2u] = value.z; }
+    dst.data[dstIdx] = $T$(value.x);
+    if (params.c > 1u) { dst.data[dstIdx+1u] = $T$(value.y); }
+    if (params.c > 2u) { dst.data[dstIdx+2u] = $T$(value.z); }
     var c = 3u;
 
     if (params.hasAlbedo != 0u) {
@@ -117,9 +117,9 @@ OIDN_NAMESPACE_BEGIN
           albedoImg.data[imgIdx+1u],
           albedoImg.data[imgIdx+2u]);
       alb = sanitize(alb, 0.0, 1.0);
-      if (c < params.c) { dst.data[dstIdx+c] = alb.x; }
-      if (c+1u < params.c) { dst.data[dstIdx+c+1u] = alb.y; }
-      if (c+2u < params.c) { dst.data[dstIdx+c+2u] = alb.z; }
+      if (c < params.c) { dst.data[dstIdx+c] = $T$(alb.x); }
+      if (c+1u < params.c) { dst.data[dstIdx+c+1u] = $T$(alb.y); }
+      if (c+2u < params.c) { dst.data[dstIdx+c+2u] = $T$(alb.z); }
       c = c + 3u;
 
       if (params.hasNormal != 0u) {
@@ -129,15 +129,15 @@ OIDN_NAMESPACE_BEGIN
             normalImg.data[imgIdx+2u]);
         nrm = sanitize(nrm, -1.0, 1.0);
         nrm = nrm * 0.5 + vec3<f32>(0.5);
-        if (c < params.c) { dst.data[dstIdx+c] = nrm.x; }
-        if (c+1u < params.c) { dst.data[dstIdx+c+1u] = nrm.y; }
-        if (c+2u < params.c) { dst.data[dstIdx+c+2u] = nrm.z; }
+        if (c < params.c) { dst.data[dstIdx+c] = $T$(nrm.x); }
+        if (c+1u < params.c) { dst.data[dstIdx+c+1u] = $T$(nrm.y); }
+        if (c+2u < params.c) { dst.data[dstIdx+c+2u] = $T$(nrm.z); }
         c = c + 3u;
       }
     }
 
     while (c < params.c) {
-      dst.data[dstIdx+c] = 0.0;
+      dst.data[dstIdx+c] = $T$(0.0);
       c = c + 1u;
     }
   }
@@ -184,11 +184,12 @@ OIDN_NAMESPACE_BEGIN
     } params = { (uint32_t)H,(uint32_t)W,(uint32_t)C,(uint32_t)transferFunc->getType(),
                  transferFunc->getInputScale(), transferFunc->normScale, transferFunc->rcpNormScale,
                  hdr ? 1u : 0u, snorm ? 1u : 0u, hasAlbedo ? 1u : 0u, hasNormal ? 1u : 0u };
-    WGPUBuffer paramsBuf = dev->createBuffer(sizeof(Params),
-                           WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst,
-                           &params);
+    const WebGPUEngine::UniformSlot paramsSlot = engine->allocUniform(&params, sizeof(Params));
 
-    const auto& cp = engine->getPipeline(kWGSL,
+    const bool f16 = dstDesc.dataType == DataType::Float16;
+    const uint32_t elem = f16 ? 2u : 4u;
+    const auto& cp = engine->getPipeline(f16 ? "input_process:f16" : "input_process:f32",
+      WebGPUEngine::specializeWGSL(kWGSL, f16),
       {WGPUBufferBindingType_ReadOnlyStorage, WGPUBufferBindingType_ReadOnlyStorage,
        WGPUBufferBindingType_ReadOnlyStorage, WGPUBufferBindingType_Storage,
        WGPUBufferBindingType_Uniform});
@@ -201,8 +202,8 @@ OIDN_NAMESPACE_BEGIN
     bgEntries[2].binding = 2;
     if (hasNormal) { bgEntries[2].buffer = normalAcc->getWGPUBuffer(); bgEntries[2].offset = normalAcc->getOffset(); bgEntries[2].size = srcSize; }
     else           { bgEntries[2].buffer = engine->getDummyBuffer(); bgEntries[2].size = 16; }
-    bgEntries[3].binding = 3; bgEntries[3].buffer = dbuf->getWGPUBuffer(); bgEntries[3].offset = dbuf->getWGPUBufferOffset() + dst->getByteOffset(); bgEntries[3].size = size_t(C)*H*W*sizeof(float);
-    bgEntries[4].binding = 4; bgEntries[4].buffer = paramsBuf; bgEntries[4].size = sizeof(Params);
+    bgEntries[3].binding = 3; bgEntries[3].buffer = dbuf->getWGPUBuffer(); bgEntries[3].offset = dbuf->getWGPUBufferOffset() + dst->getByteOffset(); bgEntries[3].size = roundByteSize4(size_t(C)*H*W*elem);
+    bgEntries[4].binding = 4; bgEntries[4].buffer = paramsSlot.buffer; bgEntries[4].offset = paramsSlot.offset; bgEntries[4].size = sizeof(Params);
     WGPUBindGroupDescriptor bgDesc{};
     bgDesc.layout = cp.bindGroupLayout;
     bgDesc.entryCount = 5;
@@ -218,7 +219,6 @@ OIDN_NAMESPACE_BEGIN
     wgpuComputePassEncoderRelease(pass);
 
     wgpuBindGroupRelease(bg);
-    wgpuBufferRelease(paramsBuf);
   }
 
 OIDN_NAMESPACE_END

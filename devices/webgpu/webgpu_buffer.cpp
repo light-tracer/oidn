@@ -42,7 +42,7 @@ OIDN_NAMESPACE_BEGIN
     if (byteSize == 0)
       return;
     WGPUBufferDescriptor desc{};
-    desc.size = byteSize;
+    desc.size = roundByteSize4(byteSize);
     desc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst |
                  WGPUBufferUsage_CopySrc;
     desc.mappedAtCreation = false;
@@ -69,12 +69,16 @@ OIDN_NAMESPACE_BEGIN
     // Make sure any pending compute work producing this buffer is submitted
     engine->flush();
 
+    // Copy and map sizes must be multiples of 4 (the underlying buffers are
+    // rounded up accordingly, so reading past the region end is in bounds)
+    const size_t copySize = roundByteSize4(byteSize);
+
     auto* dev = static_cast<WebGPUDevice*>(engine->getDevice());
-    WGPUBuffer readback = dev->createBuffer(byteSize,
+    WGPUBuffer readback = dev->createBuffer(copySize,
                                  WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
 
     WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(dev->device, nullptr);
-    wgpuCommandEncoderCopyBufferToBuffer(enc, buffer, this->byteOffset + byteOffset, readback, 0, byteSize);
+    wgpuCommandEncoderCopyBufferToBuffer(enc, buffer, this->byteOffset + byteOffset, readback, 0, copySize);
     WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(enc, nullptr);
     dev->submit(cmd);
     wgpuCommandBufferRelease(cmd);
@@ -91,10 +95,10 @@ OIDN_NAMESPACE_BEGIN
     cbInfo.userdata1 = &done;
   #if defined(__EMSCRIPTEN__)
     cbInfo.mode = WGPUCallbackMode_WaitAnyOnly;
-    dev->waitFuture(wgpuBufferMapAsync(readback, WGPUMapMode_Read, 0, byteSize, cbInfo));
+    dev->waitFuture(wgpuBufferMapAsync(readback, WGPUMapMode_Read, 0, copySize, cbInfo));
   #else
     cbInfo.mode = WGPUCallbackMode_AllowProcessEvents;
-    wgpuBufferMapAsync(readback, WGPUMapMode_Read, 0, byteSize, cbInfo);
+    wgpuBufferMapAsync(readback, WGPUMapMode_Read, 0, copySize, cbInfo);
     while (!done)
       dev->sync();
   #endif
@@ -102,7 +106,7 @@ OIDN_NAMESPACE_BEGIN
       throw std::runtime_error("failed to map WebGPU readback buffer");
     // Note: must be the const variant; GetMappedRange fails on read-mapped
     // buffers in Dawn/emdawnwebgpu
-    std::memcpy(dstHostPtr, wgpuBufferGetConstMappedRange(readback,0,byteSize), byteSize);
+    std::memcpy(dstHostPtr, wgpuBufferGetConstMappedRange(readback,0,copySize), byteSize);
     wgpuBufferUnmap(readback);
     wgpuBufferRelease(readback);
   }
@@ -117,12 +121,18 @@ OIDN_NAMESPACE_BEGIN
     // Keep queue ordering: submit any pending compute work first
     engine->flush();
 
+    // Copy sizes must be multiples of 4 (both buffers are rounded up
+    // accordingly, so the extra bytes are in bounds)
+    const size_t copySize = roundByteSize4(byteSize);
+
     auto* dev = static_cast<WebGPUDevice*>(engine->getDevice());
+    // createBuffer rounds the buffer size up itself but copies only byteSize
+    // bytes from the host pointer
     WGPUBuffer staging = dev->createBuffer(byteSize,
                                 WGPUBufferUsage_MapWrite | WGPUBufferUsage_CopySrc, srcHostPtr);
 
     WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(dev->device, nullptr);
-    wgpuCommandEncoderCopyBufferToBuffer(enc, staging, 0, buffer, this->byteOffset + byteOffset, byteSize);
+    wgpuCommandEncoderCopyBufferToBuffer(enc, staging, 0, buffer, this->byteOffset + byteOffset, copySize);
     WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(enc, nullptr);
     dev->submit(cmd);
     wgpuCommandBufferRelease(cmd);

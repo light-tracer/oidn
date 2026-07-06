@@ -16,11 +16,13 @@ OIDN_NAMESPACE_BEGIN
                                      WGPUAdapter adapter,
                                      WGPUStringView,
                                      void* userdata1,
-                                     void*)
+                                     void* userdata2)
   {
     auto* out = static_cast<WGPUAdapter*>(userdata1);
     if (status == WGPURequestAdapterStatus_Success)
       *out = adapter;
+    if (userdata2)
+      *static_cast<bool*>(userdata2) = true;
   }
 
   static void handle_request_device(WGPURequestDeviceStatus status,
@@ -74,7 +76,16 @@ OIDN_NAMESPACE_BEGIN
     instDesc.requiredFeatures = &timedWaitAny;
     instance = wgpuCreateInstance(&instDesc);
   #else
-    instance = wgpuCreateInstance(nullptr);
+    // Prefer the Vulkan backend: wgpu-native's DX12 backend compiles shaders
+    // with FXC, which doesn't support shader-f16 (it would need a DXC
+    // redistributable). Fall back to the default backend selection if no
+    // Vulkan adapter is available.
+    WGPUInstanceExtras extras{};
+    extras.chain.sType = (WGPUSType)WGPUSType_InstanceExtras;
+    extras.backends = WGPUInstanceBackend_Vulkan;
+    WGPUInstanceDescriptor instDesc{};
+    instDesc.nextInChain = &extras.chain;
+    instance = wgpuCreateInstance(&instDesc);
   #endif
     if (!instance)
       throw std::runtime_error("failed to create WebGPU instance");
@@ -88,10 +99,25 @@ OIDN_NAMESPACE_BEGIN
     adapterCb.mode = WGPUCallbackMode_WaitAnyOnly;
     waitFuture(wgpuInstanceRequestAdapter(instance, &opts, adapterCb));
   #else
+    bool adapterDone = false;
     adapterCb.mode = WGPUCallbackMode_AllowProcessEvents;
+    adapterCb.userdata2 = &adapterDone;
     wgpuInstanceRequestAdapter(instance, &opts, adapterCb);
-    while (!adapter)
+    while (!adapterDone)
       wgpuInstanceProcessEvents(instance);
+
+    if (!adapter)
+    {
+      // No Vulkan adapter: retry with all backends
+      wgpuInstanceRelease(instance);
+      instance = wgpuCreateInstance(nullptr);
+      if (!instance)
+        throw std::runtime_error("failed to create WebGPU instance");
+      adapterDone = false;
+      wgpuInstanceRequestAdapter(instance, &opts, adapterCb);
+      while (!adapterDone)
+        wgpuInstanceProcessEvents(instance);
+    }
   #endif
     if (!adapter)
       throw std::runtime_error("failed to get WebGPU adapter");
@@ -103,8 +129,19 @@ OIDN_NAMESPACE_BEGIN
       {
         std::cout << "  Adapter : ";
         std::cout.write(info.device.data, info.device.length);
-        std::cout << std::endl;
+        std::cout << " (backend " << (int)info.backendType << ")" << std::endl;
         wgpuAdapterInfoFreeMembers(info);
+      }
+
+      if (isVerbose(2))
+      {
+        WGPUSupportedFeatures features{};
+        wgpuAdapterGetFeatures(adapter, &features);
+        std::cout << "  Features:" << std::hex;
+        for (size_t i = 0; i < features.featureCount; ++i)
+          std::cout << " 0x" << (uint32_t)features.features[i];
+        std::cout << std::dec << std::endl;
+        wgpuSupportedFeaturesFreeMembers(features);
       }
     }
 
@@ -118,6 +155,16 @@ OIDN_NAMESPACE_BEGIN
 
     WGPUDeviceDescriptor devDesc{};
     devDesc.uncapturedErrorCallbackInfo.callback = handle_uncaptured_error;
+
+    // Denoise in half precision when the adapter supports shader-f16 (like
+    // the other GPU backends); halves the memory bandwidth of the network
+    const bool hasF16 = wgpuAdapterHasFeature(adapter, WGPUFeatureName_ShaderF16);
+    static const WGPUFeatureName f16Feature = WGPUFeatureName_ShaderF16;
+    if (hasF16)
+    {
+      devDesc.requiredFeatureCount = 1;
+      devDesc.requiredFeatures = &f16Feature;
+    }
 
     // The defaults (256 MB max buffer, 128 MB max storage binding) are too
     // small for the scratch heap and tensor bindings of larger images, so
@@ -172,11 +219,14 @@ OIDN_NAMESPACE_BEGIN
 
     // HWC tensors (like Metal); OHWI weights so that input channels are
     // contiguous in memory, enabling vec4 loads in the conv kernel
-    tensorDataType = DataType::Float32;
-    weightDataType = DataType::Float32;
+    tensorDataType = hasF16 ? DataType::Float16 : DataType::Float32;
+    weightDataType = hasF16 ? DataType::Float16 : DataType::Float32;
     tensorLayout   = TensorLayout::hwc;
     weightLayout   = TensorLayout::ohwi;
     tensorBlockC   = 1;
+
+    if (isVerbose())
+      std::cout << "  DType   : " << (hasF16 ? "Float16" : "Float32") << std::endl;
 
     subdevices.emplace_back(new Subdevice(std::unique_ptr<Engine>(new WebGPUEngine(this))));
   }
@@ -215,14 +265,15 @@ OIDN_NAMESPACE_BEGIN
   WGPUBuffer WebGPUDevice::createBuffer(size_t byteSize, WGPUBufferUsage usage,
                                         const void* initData)
   {
+    const size_t size4 = roundByteSize4(byteSize);
     WGPUBufferDescriptor desc{};
     desc.usage = usage;
-    desc.size  = byteSize;
+    desc.size  = size4;
     desc.mappedAtCreation = initData != nullptr;
     WGPUBuffer buf = wgpuDeviceCreateBuffer(device, &desc);
     if (initData)
     {
-      std::memcpy(wgpuBufferGetMappedRange(buf, 0, byteSize), initData, byteSize);
+      std::memcpy(wgpuBufferGetMappedRange(buf, 0, size4), initData, byteSize);
       wgpuBufferUnmap(buf);
     }
     return buf;
