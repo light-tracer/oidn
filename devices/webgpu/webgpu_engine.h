@@ -132,12 +132,15 @@ OIDN_NAMESPACE_BEGIN
 
     WebGPUDevice* device;
 
-    // Vectorized conv variant (input channels multiple of 4). Pipelines are
-    // specialized per (IC4, KH, KW, dtype) via override constants so the loops
-    // have compile-time trip counts (crucial for Tint/FXC in browsers).
-    WGPUShaderModule convVec4Modules[2] = {nullptr, nullptr}; // [f32, f16]
-    std::map<std::array<uint32_t, 4>, WGPUComputePipeline> convVec4Pipelines;
-    WGPUComputePipeline getConvVec4Pipeline(uint32_t ic4, uint32_t kh, uint32_t kw, bool f16);
+    // Specialized conv variants: vec4 (input channels multiple of 4) and
+    // workgroup-tiled (plain convs with input channels multiple of 16).
+    // Pipelines are specialized per (variant, IC4, KH, KW, dtype) via override
+    // constants so the loops have compile-time trip counts (crucial for
+    // Tint/FXC in browsers).
+    WGPUShaderModule convVec4Modules[2]  = {nullptr, nullptr}; // [f32, f16]
+    WGPUShaderModule convTiledModules[2] = {nullptr, nullptr}; // [f32, f16]
+    std::map<std::array<uint32_t, 5>, WGPUComputePipeline> convVariantPipelines;
+    WGPUComputePipeline getConvVariantPipeline(bool tiled, uint32_t ic4, uint32_t kh, uint32_t kw, bool f16);
 
     WGPUShaderModule addShaderModule = nullptr;
     WGPUBindGroupLayout addBindGroupLayout = nullptr;

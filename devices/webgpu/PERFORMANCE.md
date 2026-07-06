@@ -11,7 +11,8 @@ steady-state (after warm-up), matching the CPU backend to RMSE ~1e-6.
 | OHWI weights + vec4 conv (4 out-channels/thread) | 225 ms | |
 | Coalesced (channel-innermost) pool/upsample | 206 ms | |
 | Single command buffer + pipeline cache | 21 ms | |
-| Fused conv+pool, uniform-buffer arena | **~19 ms** | current (best of N; run-to-run variance 19-48 ms) |
+| Fused conv+pool, uniform-buffer arena | ~19 ms | |
+| Workgroup-tiled conv (plain convs) | **~20 ms median, ~13 ms best** | current; large run-to-run variance (GPU clock states), medians over 30 runs: 20.5 ms tiled vs 23.4 ms untiled |
 
 The CPU backend (20-thread i7-12700K) does the same denoise in ~63 ms, so the
 WebGPU backend is ~3× faster on this machine as of the last measurement.
@@ -67,14 +68,25 @@ WebGPU backend is ~3× faster on this machine as of the last measurement.
   The instance now prefers the Vulkan backend natively (with fallback) to
   maximize the chance of f16 on non-NVIDIA GPUs.
 
+- **Workgroup-tiled conv.** Plain (`postOp == None`) convs with `ic % 16 == 0`
+  now stage their input tile (8×8 outputs + kernel halo, zero-padded at image
+  borders) into workgroup memory in 16-channel chunks
+  (`kConv2dTiledWGSL`), so each input pixel is read from global memory once
+  per workgroup instead of KH·KW times. Weights stay in global memory (all 64
+  threads read the same weight in lockstep — caches/broadcasts fine).
+  Measured ~13% faster at the median (20.5 vs 23.4 ms over 30 runs), best
+  runs ~13 ms. Not used for fused-pool convs (their tile would be ~4× larger
+  than the 16 KB workgroup limit allows per chunk). Note the accumulation
+  order changes (channel chunks), so the output hash differs from the vec4
+  kernel while staying at RMSE ~1.6e-6 vs the CPU backend.
+
 ## Ideas not yet tried (rough expected payoff)
 
-- **Shared-memory / workgroup tiled conv.** The conv kernel currently reads src
-  and weights straight from global memory every MAC. It runs at ~250 GFLOP/s,
-  which is ~2% of the 3060's FP32 peak — memory-bound, so a classic tiled conv
-  (stage an input tile + the 3×3 weights into `var<workgroup>` and reuse across
-  the workgroup) is the highest-upside remaining lever. Could plausibly get the
-  denoise into the sub-10 ms range.
+- **Tiled fused-pool conv.** The 4 fused conv+pool layers still use the
+  untiled kernel; a tiled variant needs a 17×17 halo tile, so it would have
+  to chunk by 8 channels or shrink the output tile.
+- **Staging weights in workgroup memory** for the tiled kernel (marginal:
+  lockstep reads already broadcast well).
 - **1×1 conv fast path.** The 1×1 convs (none in the default RT UNet, but used
   by some models) degenerate to a matmul and could use a wider tiling.
 

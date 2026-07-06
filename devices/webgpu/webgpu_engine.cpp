@@ -207,6 +207,116 @@ OIDN_NAMESPACE_BEGIN
   }
   )wgsl";
 
+  // Workgroup-tiled variant of the vec4 kernel for plain (postOp == None)
+  // convolutions with ic % 16 == 0: the 8x8 workgroup cooperatively stages the
+  // input tile it needs (output tile + kernel halo, zero-padded at image
+  // borders) into workgroup memory in 16-channel chunks, so each input pixel
+  // is read from global memory once per workgroup instead of KH*KW times.
+  // Weights keep coming from global memory: all 64 threads read the same
+  // weight value in lockstep, which caches/broadcasts well.
+  static const char* kConv2dTiledWGSL = R"wgsl(
+  struct TensorF { data: array<$T$>, };
+  struct TensorV { data: array<vec4<$T$>>, };
+
+  @group(0) @binding(0) var<storage, read_write> src   : TensorV;
+  @group(0) @binding(1) var<storage, read_write> weight: TensorV;
+  @group(0) @binding(2) var<storage, read_write> bias  : TensorF;
+  @group(0) @binding(3) var<storage, read_write> dst   : TensorF;
+
+  struct Params { ic: u32, ih: u32, iw: u32,
+                  oc: u32, oh: u32, ow: u32,
+                  kh: u32, kw: u32,
+                  padH: u32, padW: u32,
+                  activation: u32,
+                  biasMode: u32,
+                  postOp: u32,
+                  pad0: u32, pad1: u32, pad2: u32, };
+  @group(0) @binding(4) var<uniform> p: Params;
+
+  override IC4: u32 = 8u; // input channels / 4 (must be a multiple of C4)
+  override KH: u32 = 3u;
+  override KW: u32 = 3u;
+
+  const TS: u32 = 8u; // output tile size == workgroup size
+  const C4: u32 = 4u; // input vec4-channels staged per chunk
+  // (TS+KH-1)*(TS+KW-1)*C4 entries; the constant size fits kernels up to 5x5
+  var<workgroup> tile: array<vec4<$T$>, 576>;
+
+  @compute @workgroup_size(8, 8, 1)
+  fn main(@builtin(global_invocation_id) gid: vec3<u32>,
+          @builtin(local_invocation_id) lid: vec3<u32>,
+          @builtin(local_invocation_index) li: u32,
+          @builtin(workgroup_id) wg: vec3<u32>) {
+    let oc0 = wg.z * 4u;
+    let tw = TS + KW - 1u;
+    let th = TS + KH - 1u;
+    let tn = tw * th;
+    let ty0 = i32(wg.y * TS) - i32(p.padH);
+    let tx0 = i32(wg.x * TS) - i32(p.padW);
+    let wStride = KH * KW * IC4;
+
+    var acc0: f32 = 0.0;
+    var acc1: f32 = 0.0;
+    var acc2: f32 = 0.0;
+    var acc3: f32 = 0.0;
+
+    for (var c0: u32 = 0u; c0 < IC4; c0 = c0 + C4) {
+      // Cooperatively stage the input tile slice (zero outside the image).
+      // Consecutive threads load consecutive channel vec4s of the same pixel,
+      // keeping the loads coalesced.
+      for (var t: u32 = li; t < tn * C4; t = t + TS * TS) {
+        let pix = t / C4;
+        let cc  = t % C4;
+        let py = ty0 + i32(pix / tw);
+        let px = tx0 + i32(pix % tw);
+        var v = vec4<$T$>();
+        if (py >= 0 && py < i32(p.ih) && px >= 0 && px < i32(p.iw)) {
+          v = src.data[(u32(py) * p.iw + u32(px)) * IC4 + c0 + cc];
+        }
+        tile[t] = v;
+      }
+      workgroupBarrier();
+
+      for (var ky: u32 = 0u; ky < KH; ky = ky + 1u) {
+        for (var kx: u32 = 0u; kx < KW; kx = kx + 1u) {
+          let tBase = ((lid.y + ky) * tw + (lid.x + kx)) * C4;
+          let wBase = ((oc0 * KH + ky) * KW + kx) * IC4 + c0;
+          for (var i: u32 = 0u; i < C4; i = i + 1u) {
+            let s = vec4<f32>(tile[tBase + i]);
+            acc0 = acc0 + dot(s, vec4<f32>(weight.data[wBase + i]));
+            acc1 = acc1 + dot(s, vec4<f32>(weight.data[wBase + wStride + i]));
+            acc2 = acc2 + dot(s, vec4<f32>(weight.data[wBase + 2u * wStride + i]));
+            acc3 = acc3 + dot(s, vec4<f32>(weight.data[wBase + 3u * wStride + i]));
+          }
+        }
+      }
+      workgroupBarrier();
+    }
+
+    // Out-of-range threads participate in the loads/barriers above and only
+    // skip the store
+    let ox = gid.x;
+    let oy = gid.y;
+    if (ox >= p.ow || oy >= p.oh || oc0 >= p.oc) { return; }
+
+    let acc = vec4<f32>(acc0, acc1, acc2, acc3);
+    let dstBase = (oy * p.ow + ox) * p.oc + oc0;
+    let n = min(4u, p.oc - oc0);
+    for (var j: u32 = 0u; j < n; j = j + 1u) {
+      var v = acc[j];
+      if (p.biasMode == 0u) {
+        v = v + f32(bias.data[oc0 + j]);
+      } else if (p.biasMode == 1u) {
+        v = v + f32(bias.data[dstBase + j]);
+      } else {
+        v = v + f32(dst.data[dstBase + j]);
+      }
+      if (p.activation == 1u && v < 0.0) { v = 0.0; }
+      dst.data[dstBase + j] = $T$(v);
+    }
+  }
+  )wgsl";
+
   // The channel is the innermost dimension of HWC tensors, so threads iterate
   // channel-first (gid.x = ox*C + c) to keep loads/stores coalesced
   static const char* kPoolWGSL = R"wgsl(
@@ -272,10 +382,13 @@ OIDN_NAMESPACE_BEGIN
     }
     if (uniformArena)     wgpuBufferRelease(uniformArena);
     if (dummyBuf)         wgpuBufferRelease(dummyBuf);
-    for (auto& entry : convVec4Pipelines)
+    for (auto& entry : convVariantPipelines)
       wgpuComputePipelineRelease(entry.second);
     for (int i = 0; i < 2; ++i)
-      if (convVec4Modules[i]) wgpuShaderModuleRelease(convVec4Modules[i]);
+    {
+      if (convVec4Modules[i])  wgpuShaderModuleRelease(convVec4Modules[i]);
+      if (convTiledModules[i]) wgpuShaderModuleRelease(convTiledModules[i]);
+    }
     if (addPipeline)        wgpuComputePipelineRelease(addPipeline);
     if (addPipelineLayout)  wgpuPipelineLayoutRelease(addPipelineLayout);
     if (addBindGroupLayout) wgpuBindGroupLayoutRelease(addBindGroupLayout);
@@ -391,20 +504,21 @@ OIDN_NAMESPACE_BEGIN
      WGPUBufferBindingType_Storage, WGPUBufferBindingType_Storage,
      WGPUBufferBindingType_Uniform};
 
-  WGPUComputePipeline WebGPUEngine::getConvVec4Pipeline(uint32_t ic4, uint32_t kh, uint32_t kw, bool f16)
+  WGPUComputePipeline WebGPUEngine::getConvVariantPipeline(bool tiled, uint32_t ic4, uint32_t kh, uint32_t kw, bool f16)
   {
-    const std::array<uint32_t, 4> key = {ic4, kh, kw, uint32_t(f16)};
-    auto it = convVec4Pipelines.find(key);
-    if (it != convVec4Pipelines.end())
+    const std::array<uint32_t, 5> key = {uint32_t(tiled), ic4, kh, kw, uint32_t(f16)};
+    auto it = convVariantPipelines.find(key);
+    if (it != convVariantPipelines.end())
       return it->second;
 
     // Reuse the scalar conv entry's pipeline layout (same binding types)
     const CachedPipeline& scalar =
       getPipeline(f16 ? "conv:f16" : "conv:f32", specializeWGSL(kConv2dWGSL, f16), kConvBindings);
 
-    if (!convVec4Modules[f16])
+    WGPUShaderModule& module = tiled ? convTiledModules[f16] : convVec4Modules[f16];
+    if (!module)
     {
-      const std::string code = specializeWGSL(kConv2dVec4WGSL, f16);
+      const std::string code = specializeWGSL(tiled ? kConv2dTiledWGSL : kConv2dVec4WGSL, f16);
       WGPUShaderSourceWGSL sourceV{};
       sourceV.chain.next = nullptr;
       sourceV.chain.sType = WGPUSType_ShaderSourceWGSL;
@@ -413,7 +527,7 @@ OIDN_NAMESPACE_BEGIN
       WGPUShaderModuleDescriptor smDescV{};
       smDescV.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&sourceV);
       smDescV.label = { nullptr, 0 };
-      convVec4Modules[f16] = wgpuDeviceCreateShaderModule(device->device, &smDescV);
+      module = wgpuDeviceCreateShaderModule(device->device, &smDescV);
     }
 
     WGPUConstantEntry constants[3] = {};
@@ -423,7 +537,7 @@ OIDN_NAMESPACE_BEGIN
 
     WGPUComputePipelineDescriptor cpDesc{};
     cpDesc.layout = scalar.pipelineLayout;
-    cpDesc.compute.module = convVec4Modules[f16];
+    cpDesc.compute.module = module;
     WGPUStringView mainEntry{ "main", WGPU_STRLEN };
     cpDesc.compute.entryPoint = mainEntry;
     cpDesc.compute.nextInChain = nullptr;
@@ -432,7 +546,7 @@ OIDN_NAMESPACE_BEGIN
     cpDesc.label = { nullptr, 0 };
     WGPUComputePipeline newPipeline = wgpuDeviceCreateComputePipeline(device->device, &cpDesc);
 
-    convVec4Pipelines.emplace(key, newPipeline);
+    convVariantPipelines.emplace(key, newPipeline);
     return newPipeline;
   }
 
@@ -779,10 +893,15 @@ OIDN_NAMESPACE_BEGIN
     WGPUBindGroup bg = wgpuDeviceCreateBindGroup(device->device, &bgDesc);
 
     // The vectorized kernel requires the input channel count to be a multiple
-    // of 4 (which holds for all interior UNet layers)
-    const bool useVec4 = (src.c % 4 == 0);
+    // of 4 (which holds for all interior UNet layers); the tiled kernel
+    // additionally requires a multiple of 16 (it stages the input tile in
+    // 16-channel chunks) and no fused post-op (a fused pool would quadruple
+    // the staged tile)
+    const bool useVec4  = (src.c % 4 == 0);
+    const bool useTiled = useVec4 && params.postOp == 0 && (src.c % 16 == 0) &&
+                          weight.h <= 5 && weight.w <= 5;
     WGPUComputePipeline convPipeline =
-      useVec4 ? getConvVec4Pipeline(src.c / 4, weight.h, weight.w, f16) : scalar.pipeline;
+      useVec4 ? getConvVariantPipeline(useTiled, src.c / 4, weight.h, weight.w, f16) : scalar.pipeline;
 
     WGPUCommandEncoder enc = getEncoder();
     WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(enc, nullptr);
