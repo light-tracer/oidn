@@ -13,6 +13,7 @@ OIDN_NAMESPACE_BEGIN
   public:
     WebGPUBuffer(WebGPUEngine* engine, size_t byteSize);
     WebGPUBuffer(const Ref<Arena>& arena, size_t byteSize, size_t byteOffset);
+    WebGPUBuffer(WebGPUEngine* engine, WGPUBuffer buffer, size_t offset, size_t size);
     ~WebGPUBuffer();
 
     Engine* getEngine() const override { return engine; }
@@ -28,6 +29,8 @@ OIDN_NAMESPACE_BEGIN
     bool isShared() const override { return shared; }
     Storage getStorage() const override { return Storage::Device; }
     bool isValid() const override { return byteSize == 0 || buffer != nullptr; }
+    const void* getMemoryIdentity() const override { return buffer; }
+    size_t getMemoryByteOffset() const override { return byteOffset; }
 
     void read(size_t byteOffset, size_t byteSize, void* dstHostPtr,
               SyncMode sync = SyncMode::Blocking) override;
@@ -45,6 +48,7 @@ OIDN_NAMESPACE_BEGIN
     WGPUBuffer buffer;
     size_t byteSize;
     bool shared;
+    bool imported = false;
   };
 
 OIDN_NAMESPACE_END

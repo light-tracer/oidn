@@ -1,5 +1,6 @@
 #pragma once
 #include "oidn.hpp"
+#include "oidn_webgpu.h"
 #include <webgpu/webgpu.h>
 #include <cstddef>
 
@@ -33,18 +34,6 @@ OIDN_NAMESPACE_BEGIN
   };
 
   class WebGPUEngine;
-
-#if defined(OIDN_STATIC_LIB)
-  #define OIDN_WEBGPU_API
-#elif defined(_WIN32)
-  #if defined(OpenImageDenoise_device_webgpu_EXPORTS)
-    #define OIDN_WEBGPU_API __declspec(dllexport)
-  #else
-    #define OIDN_WEBGPU_API __declspec(dllimport)
-  #endif
-#else
-  #define OIDN_WEBGPU_API __attribute__((visibility("default")))
-#endif
 
   OIDN_WEBGPU_API WebGPUEngine* getEngine(const DeviceRef& device);
 

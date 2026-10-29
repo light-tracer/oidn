@@ -116,7 +116,7 @@ OIDN_API_NAMESPACE_BEGIN
         OIDN_TRY
           checkHandle(obj);
           OIDN_LOCK_DEVICE(obj);
-          obj->getDevice()->wait(); // wait for all async operations to complete
+          obj->getDevice()->waitForRelease();
           obj->destroy();
           obj = nullptr;
         OIDN_CATCH_DEVICE(obj)
@@ -132,7 +132,7 @@ OIDN_API_NAMESPACE_BEGIN
           checkHandle(device);
           // No need to lock the device because we're just destroying it
           device->enter(); // save state
-          device->wait();  // wait for all async operations to complete
+          device->waitForRelease();
           device->leave(); // restore state
           device->destroy();
           device = nullptr;

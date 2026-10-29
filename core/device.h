@@ -140,6 +140,10 @@ OIDN_NAMESPACE_BEGIN
     // Waits for all previously submitted commands to complete (blocks)
     virtual void wait() = 0;
 
+    // Most backends must finish asynchronous work before destroying objects.
+    // Command-buffer runtimes can retain the referenced GPU objects instead.
+    virtual void waitForRelease() { wait(); }
+
     // Waits for all previously submitted commands to complete, and throws the first asynchronous
     // error that occured since the previous invocation of this function (blocks)
     void waitAndThrow();

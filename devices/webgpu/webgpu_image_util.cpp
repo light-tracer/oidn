@@ -1,5 +1,7 @@
 #include "webgpu_image_util.h"
 #include "webgpu_buffer.h"
+#include "webgpu_device.h"
+#include "webgpu_texture.h"
 
 OIDN_NAMESPACE_BEGIN
 
@@ -18,6 +20,8 @@ OIDN_NAMESPACE_BEGIN
     auto* wb = image ? dynamic_cast<WebGPUBuffer*>(image->getBuffer()) : nullptr;
     if (wb)
     {
+      if (auto* texture = dynamic_cast<WebGPUTextureBuffer*>(wb))
+        engine->accessTexture(texture, forWrite);
       buf    = wb->getWGPUBuffer();
       dataOffset = wb->getWGPUBufferOffset() + image->getByteOffset();
       if (dataOffset % 4 != 0)
@@ -28,6 +32,8 @@ OIDN_NAMESPACE_BEGIN
     }
     else if (image && image->getPtr())
     {
+      if (static_cast<WebGPUDevice*>(engine->getDevice())->isExternal())
+        throw Exception(Error::InvalidArgument, "external WebGPU encoding requires GPU-backed images");
       // Host memory: stage through a GPU buffer
       staging = engine->newBuffer(byteSize, Storage::Device);
       // Output kernels may only touch one tile. Preserve the other pixels and

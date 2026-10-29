@@ -10,6 +10,7 @@
 #include "webgpu_output_process.h"
 #include "webgpu_image_copy.h"
 #include "webgpu_autoexposure.h"
+#include "webgpu_texture.h"
 #include "core/concat_conv.h"
 #include <cmath>
 #include <cstring>
@@ -736,7 +737,7 @@ OIDN_NAMESPACE_BEGIN
   {
     size_t count = size_t(n) * c * h * w;
     size_t bytes = count * sizeof(float);
-    WGPUBufferUsage usage = WGPUBufferUsage_Storage;
+    OIDNWGPUBufferUsage usage = WGPUBufferUsage_Storage;
     if (type == WebGPUTensorType::Output)
       usage |= WGPUBufferUsage_MapRead | WGPUBufferUsage_CopySrc;
     else
@@ -789,6 +790,20 @@ OIDN_NAMESPACE_BEGIN
 
   WebGPUEngine::UniformSlot WebGPUEngine::allocUniform(const void* data, size_t byteSize)
   {
+    if (externalEncoder)
+    {
+      const size_t size = (byteSize + 255) & ~size_t(255);
+      if (externalUniformPages.empty() || externalUniformOffset + size > uniformArenaByteSize)
+      {
+        externalUniformPages.push_back(device->createBuffer(uniformArenaByteSize,
+          WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst));
+        externalUniformOffset = 0;
+      }
+      const UniformSlot slot{externalUniformPages.back(), externalUniformOffset};
+      externalUniformOffset += size;
+      wgpuQueueWriteBuffer(device->queue, slot.buffer, slot.offset, data, byteSize);
+      return slot;
+    }
     if (!uniformArena)
       uniformArena = device->createBuffer(uniformArenaByteSize,
                                           WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst);
@@ -811,6 +826,7 @@ OIDN_NAMESPACE_BEGIN
 
   WGPUCommandEncoder WebGPUEngine::getEncoder()
   {
+    if (externalEncoder) return externalEncoder;
     if (!pendingEncoder)
       pendingEncoder = wgpuDeviceCreateCommandEncoder(device->device, nullptr);
     return pendingEncoder;
@@ -818,6 +834,7 @@ OIDN_NAMESPACE_BEGIN
 
   void WebGPUEngine::flush()
   {
+    if (externalEncoder) return;
     if (!pendingEncoder)
       return;
     WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(pendingEncoder, nullptr);
@@ -827,9 +844,60 @@ OIDN_NAMESPACE_BEGIN
     wgpuCommandBufferRelease(cmd);
   }
 
+  void WebGPUEngine::beginExternalEncoding(WGPUCommandEncoder encoder)
+  {
+    if (!encoder || externalEncoder || pendingEncoder)
+      throw Exception(Error::InvalidOperation, "invalid or nested external WebGPU encode");
+    externalEncoder = encoder;
+    externalUniformOffset = 0;
+  }
+
+  void WebGPUEngine::endExternalEncoding()
+  {
+    // Encoded bind groups retain their resources until execution completes.
+    // Release references, never Destroy; later encodes use distinct pages.
+    externalEncoder = nullptr;
+    for (auto page : externalUniformPages) wgpuBufferRelease(page);
+    externalUniformPages.clear();
+    textureReads.clear();
+    textureWrites.clear();
+  }
+
+  void WebGPUEngine::accessTexture(WebGPUTextureBuffer* texture, bool write)
+  {
+    if (!externalEncoder)
+      throw Exception(Error::InvalidOperation, "texture images require an external WebGPU encoder");
+    if (write)
+    {
+      if (textureWrites.insert(texture).second) texture->initializeAlpha();
+    }
+    else if (textureReads.insert(texture).second) texture->readTexture();
+  }
+
+  void WebGPUEngine::finishExternalTextures()
+  {
+    for (auto* texture : textureWrites) texture->writeTexture();
+  }
+
   const WebGPUEngine::CachedPipeline& WebGPUEngine::getPipeline(
     const std::string& key, const std::string& code,
     std::initializer_list<WGPUBufferBindingType> bindingTypes)
+  {
+    std::vector<WGPUBindGroupLayoutEntry> entries(bindingTypes.size());
+    uint32_t i = 0;
+    for (WGPUBufferBindingType type : bindingTypes)
+    {
+      entries[i].binding = i;
+      entries[i].visibility = WGPUShaderStage_Compute;
+      entries[i].buffer.type = type;
+      i++;
+    }
+    return getPipeline(key, code, entries);
+  }
+
+  const WebGPUEngine::CachedPipeline& WebGPUEngine::getPipeline(
+    const std::string& key, const std::string& code,
+    const std::vector<WGPUBindGroupLayoutEntry>& entries)
   {
     auto it = pipelineCache.find(key);
     if (it != pipelineCache.end())
@@ -844,17 +912,6 @@ OIDN_NAMESPACE_BEGIN
     smDesc.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&source);
     smDesc.label = {};
     cp.module = wgpuDeviceCreateShaderModule(device->device, &smDesc);
-
-    std::vector<WGPUBindGroupLayoutEntry> entries(bindingTypes.size());
-    uint32_t i = 0;
-    for (WGPUBufferBindingType type : bindingTypes)
-    {
-      entries[i] = {};
-      entries[i].binding = i;
-      entries[i].visibility = WGPUShaderStage_Compute;
-      entries[i].buffer.type = type;
-      i++;
-    }
 
     WGPUBindGroupLayoutDescriptor bglDesc{};
     bglDesc.entryCount = entries.size();

@@ -1,5 +1,6 @@
 #include "webgpu_device.h"
 #include "webgpu_engine.h"
+#include "webgpu_compat.h"
 #include "core/context.h"
 #include <cstring>
 #include <iostream>
@@ -58,6 +59,37 @@ OIDN_NAMESPACE_BEGIN
 
   WebGPUDevice::WebGPUDevice() {}
 
+  WebGPUDevice::WebGPUDevice(WGPUDevice device, WGPUQueue queue)
+    : external(true), device(device), queue(queue)
+  {
+    if (!device)
+      throw Exception(Error::InvalidArgument, "WebGPU device is null");
+  #if defined(OIDN_WEBGPU_LEGACY_BROWSER)
+    wgpuDeviceReference(device);
+    if (queue) wgpuQueueReference(queue);
+  #else
+    wgpuDeviceAddRef(device);
+    if (queue) wgpuQueueAddRef(queue);
+  #endif
+    if (!queue) this->queue = wgpuDeviceGetQueue(device);
+  }
+
+  void WebGPUDevice::initExternal()
+  {
+    const bool f16 = wgpuDeviceHasFeature(device, WGPUFeatureName_ShaderF16);
+    tensorDataType = weightDataType = f16 ? DataType::Float16 : DataType::Float32;
+    tensorLayout = TensorLayout::hwc;
+    weightLayout = TensorLayout::ohwi;
+    tensorBlockC = 1;
+    subdevices.emplace_back(new Subdevice(std::unique_ptr<Engine>(new WebGPUEngine(this))));
+  }
+
+  void WebGPUDevice::beginPrepare()
+  {
+    if (preparing) throw Exception(Error::InvalidOperation, "WebGPU preparation is already active");
+    preparing = true;
+  }
+
   WebGPUDevice::~WebGPUDevice()
   {
     if (queue)   wgpuQueueRelease(queue);
@@ -68,6 +100,7 @@ OIDN_NAMESPACE_BEGIN
 
   void WebGPUDevice::init()
   {
+    if (external) { initExternal(); return; }
   #if defined(OIDN_WEBGPU_EXTERNAL_ONLY)
     throw Exception(Error::InvalidOperation, "an external WebGPU context is required");
   #else
@@ -245,6 +278,8 @@ OIDN_NAMESPACE_BEGIN
 
   void WebGPUDevice::sync()
   {
+    if (external)
+      throw Exception(Error::InvalidOperation, "wait for external WebGPU work through the application");
   #if defined(OIDN_WEBGPU_EXTERNAL_ONLY)
     throw Exception(Error::InvalidOperation, "wait for external WebGPU work through the application");
   #elif defined(__EMSCRIPTEN__)
@@ -268,6 +303,7 @@ OIDN_NAMESPACE_BEGIN
   void WebGPUDevice::wait()
   {
     flush();
+    if (external && preparing) return;
     sync();
   }
 
@@ -283,7 +319,7 @@ OIDN_NAMESPACE_BEGIN
   #endif
   }
 
-  WGPUBuffer WebGPUDevice::createBuffer(size_t byteSize, WGPUBufferUsage usage,
+  WGPUBuffer WebGPUDevice::createBuffer(size_t byteSize, OIDNWGPUBufferUsage usage,
                                         const void* initData)
   {
     const size_t size4 = roundByteSize4(byteSize);

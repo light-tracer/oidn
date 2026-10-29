@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 
 OIDN_NAMESPACE_BEGIN
 
@@ -15,6 +16,7 @@ OIDN_NAMESPACE_BEGIN
   class WebGPUOutputProcess;
   class WebGPUImageCopy;
   class WebGPUAutoexposure;
+  class WebGPUTextureBuffer;
 
   // WebGPU requires buffer sizes, copy/map sizes and storage binding sizes to
   // be multiples of 4 bytes. f16 tensor regions can be 2-aligned only (e.g. a
@@ -115,6 +117,11 @@ OIDN_NAMESPACE_BEGIN
     // flush automatically to keep queue ordering correct.
     WGPUCommandEncoder getEncoder();
     void flush() override;
+    void beginExternalEncoding(WGPUCommandEncoder encoder);
+    void endExternalEncoding();
+    void finishExternalTextures();
+    void accessTexture(WebGPUTextureBuffer* texture, bool write);
+    bool isExternalEncoding() const { return externalEncoder != nullptr; }
 
     // Cached compute pipeline for ops with (possibly specialized) WGSL
     // sources. bindingTypes describes the buffer bindings in order.
@@ -127,6 +134,8 @@ OIDN_NAMESPACE_BEGIN
     };
     const CachedPipeline& getPipeline(const std::string& key, const std::string& code,
                                       std::initializer_list<WGPUBufferBindingType> bindingTypes);
+    const CachedPipeline& getPipeline(const std::string& key, const std::string& code,
+                                      const std::vector<WGPUBindGroupLayoutEntry>& entries);
 
     // Instantiates a WGSL kernel template for f32 or f16 tensors: replaces the
     // $T$ placeholder with the element type, and prepends 'enable f16;' when
@@ -167,6 +176,10 @@ OIDN_NAMESPACE_BEGIN
 
     WGPUBuffer dummyBuf = nullptr;
     WGPUCommandEncoder pendingEncoder = nullptr;
+    WGPUCommandEncoder externalEncoder = nullptr;
+    std::vector<WGPUBuffer> externalUniformPages;
+    size_t externalUniformOffset = 0;
+    std::unordered_set<WebGPUTextureBuffer*> textureReads, textureWrites;
 
     static constexpr size_t uniformArenaByteSize = 256 * 1024;
     WGPUBuffer uniformArena = nullptr;

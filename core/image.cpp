@@ -81,7 +81,7 @@ OIDN_NAMESPACE_BEGIN
         !isAddSafe(address + byteOffset, getByteSize()))
       throw Exception(Error::InvalidArgument, "image region is out of range");
 
-    this->ptr = static_cast<char*>(ptr) + byteOffset;
+    this->ptr = ptr ? static_cast<char*>(ptr) + byteOffset : nullptr;
   }
 
   Image::Image(const Ref<Buffer>& buffer, const ImageDesc& desc, size_t byteOffset)
@@ -91,7 +91,7 @@ OIDN_NAMESPACE_BEGIN
     if (!isRangeValid(byteOffset, getByteSize(), buffer->getByteSize()))
       throw Exception(Error::InvalidArgument, "buffer range is out of bounds");
 
-    this->ptr = static_cast<char*>(buffer->getPtr()) + byteOffset;
+    this->ptr = buffer->getPtr() ? static_cast<char*>(buffer->getPtr()) + byteOffset : nullptr;
   }
 
   Image::Image(const Ref<Buffer>& buffer, Format format, size_t width, size_t height, size_t byteOffset, size_t pixelByteStride, size_t rowByteStride)
@@ -101,7 +101,7 @@ OIDN_NAMESPACE_BEGIN
     if (!isRangeValid(byteOffset, getByteSize(), buffer->getByteSize()))
       throw Exception(Error::InvalidArgument, "buffer range is out of bounds");
 
-    this->ptr = static_cast<char*>(buffer->getPtr()) + byteOffset;
+    this->ptr = buffer->getPtr() ? static_cast<char*>(buffer->getPtr()) + byteOffset : nullptr;
   }
 
   Image::Image(Engine* engine, Format format, size_t width, size_t height)
@@ -126,6 +126,19 @@ OIDN_NAMESPACE_BEGIN
   {
     if (!*this || !other)
       return false;
+
+    if (buffer && other.buffer)
+    {
+      const void* identity = buffer->getMemoryIdentity();
+      const void* otherIdentity = other.buffer->getMemoryIdentity();
+      if (identity && otherIdentity)
+      {
+        if (identity != otherIdentity) return false;
+        const size_t begin = buffer->getMemoryByteOffset() + byteOffset;
+        const size_t otherBegin = other.buffer->getMemoryByteOffset() + other.byteOffset;
+        return begin < otherBegin + other.getByteSize() && otherBegin < begin + getByteSize();
+      }
+    }
 
     // If any of the images are not backed by non-shared buffers, we cannot determine whether they
     // overlap due to potential virtual address aliasing, so we conservatively assume they do

@@ -1,5 +1,7 @@
 set(OIDN_WEBGPU_SOURCES
   webgpu_device.cpp
+  webgpu_api.cpp
+  webgpu_texture.cpp
   webgpu_buffer.cpp
   webgpu_heap.cpp
   webgpu_arena.cpp

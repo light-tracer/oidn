@@ -1,0 +1,73 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>OIDN shared WebGPU provider regression</title>
+<button id="run">Run shared-device regression</button>
+<pre id="log"></pre>
+<script src="oidn_external_test.js"></script>
+<script>
+const log = text => document.querySelector('#log').textContent += text + '\n';
+const require = (condition, message) => { if (!condition) throw Error(message); };
+const fetchBytes = async path => {
+  const response = await fetch(path);
+  require(response.ok, path + ': ' + response.status);
+  return new Uint8Array(await response.arrayBuffer());
+};
+document.querySelector('#run').onclick = async () => {
+ try {
+  const adapter = await navigator.gpu.requestAdapter({powerPreference:'high-performance'});
+  const features = adapter.features.has('shader-f16') ? ['shader-f16'] : [];
+  const device = await adapter.requestDevice({requiredFeatures:features, requiredLimits:{
+    maxBufferSize:adapter.limits.maxBufferSize,
+    maxStorageBufferBindingSize:adapter.limits.maxStorageBufferBindingSize}});
+  const errors = [];
+  device.addEventListener('uncapturederror', e => { errors.push(e.error.message); log(e.error.message); });
+  const module = await createOIDNTest({preinitializedWebGPUDevice:device, print:log, printErr:log});
+  require(module._oidnTestInit(), 'init failed');
+  const cases = await (await fetch('regression-data/cases.json')).json();
+  for (const test of cases) {
+    const input = await fetchBytes('regression-data/' + test.name + '.bin');
+    const reference = new Float32Array((await fetchBytes('regression-data/' + test.name + '-cpu.bin')).buffer);
+    const weights = await fetchBytes('weights/' + test.weights);
+    const color = device.createBuffer({size:input.length, usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
+    const output = device.createBuffer({size:input.length, usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
+    device.queue.writeBuffer(color, 0, input);
+    const weightsPtr = module._oidnTestAlloc(weights.length);
+    module.HEAPU8.set(weights, weightsPtr);
+    const colorHandle = module.importBuffer(color), outputHandle = module.importBuffer(output);
+    require(module._oidnTestPrepare(colorHandle, outputHandle, weightsPtr, weights.length, test.width, test.height, test.hdr), 'prepare failed');
+    module.releaseBuffer(colorHandle); module.releaseBuffer(outputHandle);
+    const encoders = [], readbacks = [];
+    for (let i = 0; i < 2; ++i) {
+      const encoder = device.createCommandEncoder();
+      const encoderHandle = module.importEncoder(encoder);
+      require(module._oidnTestEncode(encoderHandle), 'encode failed');
+      module.releaseEncoder(encoderHandle);
+      const readback = device.createBuffer({size:input.length, usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+      encoder.copyBufferToBuffer(output, 0, readback, 0, input.length);
+      encoders.push(encoder.finish()); readbacks.push(readback);
+    }
+    device.queue.submit(encoders);
+    for (const readback of readbacks) {
+      await readback.mapAsync(GPUMapMode.READ);
+      const values = new Float32Array(readback.getMappedRange());
+      let error = 0, outliers = 0;
+      for (let i = 0; i < values.length; ++i) {
+        require(Number.isFinite(values[i]), 'non-finite output');
+        const absolute = Math.abs(values[i]-reference[i]);
+        const relative = absolute/(Math.abs(values[i])+Math.abs(reference[i])+.01);
+        error += relative;
+        outliers += absolute > .02 && relative > .05;
+      }
+      error /= values.length;
+      log(JSON.stringify({case:test.name, features, relativeMean:error, outliers}));
+      require(error <= .003 && outliers === 0, 'CPU parity failed');
+      readback.unmap(); readback.destroy();
+    }
+    // The next prepare releases the previous filter, so leave its shared blob
+    // alive here. Three small fixtures are intentional for this harness.
+  }
+  require(errors.length === 0, 'WebGPU validation errors');
+  log('PASS: one application device, two encoders before submit, no Asyncify');
+ } catch (error) { log('FAIL: ' + error.stack); }
+};
+</script>

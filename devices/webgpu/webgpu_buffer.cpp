@@ -2,6 +2,7 @@
 #include "webgpu_device.h"
 #include "webgpu_engine.h"
 #include "webgpu_heap.h"
+#include "webgpu_compat.h"
 #include <cstring>
 
 OIDN_NAMESPACE_BEGIN
@@ -37,6 +38,21 @@ OIDN_NAMESPACE_BEGIN
     free();
   }
 
+  WebGPUBuffer::WebGPUBuffer(WebGPUEngine* engine, WGPUBuffer buffer, size_t offset, size_t size)
+    : engine(engine), buffer(buffer), byteSize(size), shared(true), imported(true)
+  {
+    if (!buffer || !isRangeValid(offset, size, wgpuBufferGetSize(buffer)) || offset % 4)
+      throw Exception(Error::InvalidArgument, "invalid WebGPU buffer range");
+    if (!(wgpuBufferGetUsage(buffer) & WGPUBufferUsage_Storage))
+      throw Exception(Error::InvalidArgument, "WebGPU buffer requires Storage usage");
+    byteOffset = offset;
+  #if defined(OIDN_WEBGPU_LEGACY_BROWSER)
+    wgpuBufferReference(buffer);
+  #else
+    wgpuBufferAddRef(buffer);
+  #endif
+  }
+
   void WebGPUBuffer::init()
   {
     if (byteSize == 0)
@@ -54,7 +70,7 @@ OIDN_NAMESPACE_BEGIN
 
   void WebGPUBuffer::free()
   {
-    if (!shared && buffer)
+    if ((!shared || imported) && buffer)
       wgpuBufferRelease(buffer);
     buffer = nullptr;
   }
@@ -117,6 +133,8 @@ OIDN_NAMESPACE_BEGIN
 
   void WebGPUBuffer::write(size_t byteOffset, size_t byteSize, const void* srcHostPtr, SyncMode)
   {
+    if (engine->isExternalEncoding())
+      throw Exception(Error::InvalidOperation, "cannot upload buffers inside an external encode");
     if (byteOffset + byteSize > this->byteSize)
       throw Exception(Error::InvalidArgument, "buffer region is out of bounds");
     if (srcHostPtr == nullptr && byteSize > 0)
