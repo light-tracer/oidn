@@ -4,10 +4,14 @@
 include(CheckCXXCompilerFlag)
 
 # Detect the processor architecture
-if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+# Emscripten/WebAssembly is a 32-bit target (wasm32); the GPU-only web build
+# does not use any of the 64-bit CPU code paths, so allow it through.
+if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8 AND NOT EMSCRIPTEN)
   message(FATAL_ERROR "Intel(R) Open Image Denoise supports 64-bit platforms only")
 endif()
-if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "arm64|aarch64|ARM64" OR IOS)
+if(EMSCRIPTEN)
+  set(OIDN_ARCH "WASM")
+elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "arm64|aarch64|ARM64" OR IOS)
   set(OIDN_ARCH "ARM64")
 else()
   set(OIDN_ARCH "X64")
@@ -266,7 +270,7 @@ else()
         append(CMAKE_SHARED_LINKER_FLAGS "-Wl,-bind_at_load")
         append(CMAKE_EXE_LINKER_FLAGS "-Wl,-bind_at_load")
       endif()
-    elseif(NOT OIDN_SANITIZER OR OIDN_SANITIZER STREQUAL "None")
+    elseif(NOT EMSCRIPTEN AND (NOT OIDN_SANITIZER OR OIDN_SANITIZER STREQUAL "None"))
       append(CMAKE_EXE_LINKER_FLAGS "-pie")
       append(CMAKE_SHARED_LINKER_FLAGS "-Wl,-z,noexecstack -Wl,-z,relro -Wl,-z,now")
       append(CMAKE_EXE_LINKER_FLAGS "-Wl,-z,noexecstack -Wl,-z,relro -Wl,-z,now")
@@ -287,6 +291,12 @@ endif()
 ## -------------------------------------------------------------------------------------------------
 ## Set flags
 ## -------------------------------------------------------------------------------------------------
+
+# The library relies on C++ exceptions for API error handling; Emscripten
+# disables exception catching by default, so enable it across the whole build.
+if(EMSCRIPTEN)
+  append(OIDN_CXX_FLAGS "-fexceptions")
+endif()
 
 append(CMAKE_C_FLAGS   "${OIDN_C_CXX_FLAGS}")
 append(CMAKE_CXX_FLAGS "${OIDN_C_CXX_FLAGS} ${OIDN_CXX_FLAGS}")

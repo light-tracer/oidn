@@ -74,6 +74,7 @@ if cfg.command == 'run':
   if sde_dir is not None:
     sde = os.path.join(sde_dir, sde)
 
+
 # Prints the name of a test
 def print_test(name, kind='Test'):
   print(kind + ':', name, '...', end=('' if cfg.log else None), flush=True)
@@ -122,6 +123,15 @@ def run_test(cmd, arch='native', retry_if_status=None):
     else:
       print('Error: test failed')
     exit(1)
+
+if cfg.device == 'wgpu':
+  for prog in ['wgpuIdentity', 'wgpuConv2d']:
+    exe = os.path.join(bin_dir, prog)
+    print_test(prog)
+    run_test(exe)
+  if cfg.command == 'run':
+    print('Success: all tests passed')
+  exit(0)
 
 # Runs main tests
 def test():

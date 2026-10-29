@@ -39,7 +39,10 @@ OIDN_NAMESPACE_BEGIN
     }
 
     void setDst(const Ref<Record<float>>& dst) { this->dst = dst; }
-    float* getDstPtr() const { return dst->getPtr(); }
+
+    // Pointer consumed by the backend's transfer function. Backends without
+    // device pointers may override this with a token resolved to device storage.
+    virtual float* getDstPtr() const { return dst->getPtr(); }
 
   protected:
     ImageDesc srcDesc;

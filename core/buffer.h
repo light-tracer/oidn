@@ -42,6 +42,8 @@ OIDN_NAMESPACE_BEGIN
     virtual size_t getByteSize() const = 0;
     virtual bool isShared() const = 0;
     virtual Storage getStorage() const = 0;
+    // Some APIs expose opaque buffer handles instead of device pointers.
+    virtual bool isValid() const { return getByteSize() == 0 || getPtr() != nullptr; }
     Arena* getArena() const { return arena.get(); }
 
     virtual void read(size_t byteOffset, size_t byteSize, void* dstHostPtr,

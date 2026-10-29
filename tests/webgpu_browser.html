@@ -1,0 +1,79 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>OIDN WebGPU browser regression</title>
+<h1>OIDN WebGPU browser regression</h1>
+<p>Compares this wasm build with CPU references, including FP16, odd sizes, sRGB, HDR autoexposure and tiling.</p>
+<button id="run">Run browser regression</button>
+<pre id="output">Ready. Generate references with tests/webgpu_browser.py first.</pre>
+<script src="oidn_web.js"></script>
+<script>
+document.querySelector('#run').onclick = async () => {
+  const button = document.querySelector('#run');
+  const output = document.querySelector('#output');
+  button.disabled = true;
+  const errors = [];
+  const results = [];
+  output.textContent = 'Running…';
+  let module;
+  try {
+    module = await createOIDN({
+      preRun: [m => { m.ENV.OIDN_VERBOSE = '1'; }],
+      print: console.log,
+      printErr: message => { errors.push(message); console.error(message); }
+    });
+    const call = (name, values) => module.ccall(name, 'number', values.map(() => 'number'), values);
+    const asyncCall = (name, values) => module.ccall(name, 'number', values.map(() => 'number'), values, {async:true});
+    if (!await asyncCall('oidnWebInit', [])) throw Error('WebGPU initialization failed');
+    const cases = await (await fetch('regression-data/cases.json')).json();
+    for (const item of cases) {
+      const weights = new Uint8Array(await (await fetch('weights/'+item.weights)).arrayBuffer());
+      let pointer = module._malloc(weights.length);
+      module.HEAPU8.set(weights, pointer);
+      if (!call('oidnWebSetWeights', [pointer, weights.length])) throw Error('weights rejected');
+      module._free(pointer);
+      if (!call('oidnWebSetOptions', [+item.srgb, 0, 1, NaN, item.memory])) throw Error('options rejected');
+      const color = new Float32Array(await (await fetch('regression-data/'+item.name+'.bin')).arrayBuffer());
+      const reference = new Float32Array(await (await fetch('regression-data/'+item.name+'-cpu.bin')).arrayBuffer());
+      pointer = module._malloc(color.byteLength);
+      const destination = module._malloc(color.byteLength);
+      module.HEAPF32.set(color, pointer/4);
+      if (item.name === 'odd-srgb') {
+        if (call('oidnWebSetOptions', [0,0,99,NaN,-1]) !== 0) throw Error('invalid quality accepted');
+        if (call('oidnWebDenoise', [0,1,pointer,0,0,0,0]) !== 0) throw Error('empty image accepted');
+        if (call('oidnWebDenoise', [65536,65536,pointer,0,0,0,0]) !== 0) throw Error('overflowing image accepted');
+      }
+      const args = [item.width,item.height,pointer,0,0,destination,+item.hdr];
+      const start = performance.now();
+      if (!await asyncCall('oidnWebDenoise', args)) throw Error(item.name+' failed');
+      let relativeSum = 0, squareSum = 0, outliers = 0;
+      for (let i = 0; i < color.length; i++) {
+        const value = module.HEAPF32[destination/4+i];
+        if (!Number.isFinite(value)) throw Error('non-finite output');
+        const difference = Math.abs(value-reference[i]);
+        const relative = difference/(Math.abs(value)+Math.abs(reference[i])+0.01);
+        relativeSum += relative; squareSum += difference*difference;
+        if (difference > 0.02 && relative > 0.05) outliers++;
+      }
+      const result = {name:item.name, avgerror:relativeSum/color.length,
+                      rmse:Math.sqrt(squareSum/color.length), outliers,
+                      milliseconds:performance.now()-start};
+      results.push(result);
+      output.textContent = JSON.stringify(results,null,2);
+      if (result.avgerror > 0.003 || outliers) throw Error(item.name+' differs from CPU');
+      // Reuse the filter and exercise the output which stays on the GPU.
+      args[5] = 0;
+      if (!await asyncCall('oidnWebDenoise', args)) throw Error('GPU-only output failed');
+      await module.oidnOutput.device.queue.onSubmittedWorkDone();
+      if (module.oidnOutput.width !== item.width) throw Error('invalid GPU output');
+      module._free(pointer); module._free(destination);
+    }
+    if (errors.length) throw Error(errors.join('\n'));
+    output.textContent = 'PASS '+results.length+' cases\n'+JSON.stringify(results,null,2);
+  } catch (error) {
+    output.textContent = 'FAIL '+error.message+'\n'+JSON.stringify(results,null,2);
+  } finally {
+    if (module) await module.ccall('oidnWebShutdown', null, [], [], {async:true});
+    button.disabled = false;
+  }
+};
+</script>

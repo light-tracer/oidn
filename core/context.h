@@ -14,6 +14,9 @@ OIDN_NAMESPACE_BEGIN
 #if defined(OIDN_STATIC_LIB)
   OIDN_DECLARE_INIT_STATIC_MODULE(device_cpu);
   OIDN_DECLARE_INIT_STATIC_MODULE(device_metal);
+  #if defined(OIDN_DEVICE_WEBGPU)
+    OIDN_DECLARE_INIT_STATIC_MODULE(device_webgpu);
+  #endif
 
   #define OIDN_INIT_STATIC_MODULE(name) init_##name()
 #else
@@ -84,6 +87,10 @@ OIDN_NAMESPACE_BEGIN
     #if defined(OIDN_DEVICE_METAL)
       if (initDeviceType(deviceType, DeviceType::Metal, "OIDN_DEVICE_METAL"))
         OIDN_INIT_STATIC_MODULE(device_metal);
+    #endif
+    #if defined(OIDN_DEVICE_WEBGPU)
+      if (initDeviceType(deviceType, DeviceType::WGPU, "OIDN_DEVICE_WEBGPU"))
+        OIDN_INIT_STATIC_MODULE(device_webgpu);
     #endif
 
       if (deviceType == DeviceType::Default)

@@ -55,8 +55,12 @@ endif()
 # File containing targets exported from the build tree for external projects
 set(OIDN_BUILD_TREE_EXPORT_FILE ${OIDN_ROOT_BINARY_DIR}/cmake/oidn_targets.cmake)
 
-# Common resource file
-set(OIDN_RESOURCE_FILE ${OIDN_ROOT_SOURCE_DIR}/common/oidn.rc)
+# Common resource file (Windows resource script; not used on other platforms)
+if(WIN32)
+  set(OIDN_RESOURCE_FILE ${OIDN_ROOT_SOURCE_DIR}/common/oidn.rc)
+else()
+  set(OIDN_RESOURCE_FILE)
+endif()
 
 # Platform-specific settings
 include(oidn_platform)

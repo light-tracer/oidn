@@ -34,6 +34,7 @@ if(NOT APPLE)
 elseif(OIDN_ARCH STREQUAL "ARM64")
   option(OIDN_DEVICE_METAL "Enable Metal device." OFF)
 endif()
+option(OIDN_DEVICE_WEBGPU "Enable WebGPU device." OFF)
 
 # Filters
 option(OIDN_FILTER_RT "Include trained weights of the RT filter." ON)
@@ -96,15 +97,34 @@ endif()
 ## Libraries
 ## -----------------------------------------------------------------------------
 
+if(OIDN_DEVICE_WEBGPU AND NOT EMSCRIPTEN)
+  # Native builds download a prebuilt wgpu-native. The Emscripten/web build
+  # gets WebGPU from the browser via the emdawnwebgpu port instead (wired up
+  # in devices/webgpu/CMakeLists.txt).
+  add_subdirectory(external/webgpu)
+endif()
+
 add_subdirectory(common)
 add_subdirectory(core)
 add_subdirectory(api)
 add_subdirectory(devices)
+enable_testing()
+# The unit tests compare the WebGPU backend against the CPU backend, so they
+# require both devices to be enabled.
+if(OIDN_DEVICE_WEBGPU AND OIDN_DEVICE_CPU)
+  add_subdirectory(tests)
+endif()
 
 # Export targets from the build tree for external projects
 export(EXPORT OpenImageDenoise_Exports
   FILE ${OIDN_BUILD_TREE_EXPORT_FILE}
 )
+
+# Emscripten/WebAssembly build: a small wasm module + JS wrapper for running
+# the denoiser in a browser via WebGPU.
+if(EMSCRIPTEN)
+  add_subdirectory(web)
+endif()
 
 ## -----------------------------------------------------------------------------
 ## Apps
@@ -125,7 +145,6 @@ install(DIRECTORY include/OpenImageDenoise
   COMPONENT devel
   PATTERN "*.in" EXCLUDE
 )
-
 # Install the generated config.h next to the headers which include it
 install(FILES ${PROJECT_BINARY_DIR}/include/OpenImageDenoise/config.h
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/OpenImageDenoise

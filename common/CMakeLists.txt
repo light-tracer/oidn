@@ -45,6 +45,7 @@ set_target_properties(OpenImageDenoise_common PROPERTIES OUTPUT_NAME ${OIDN_LIBR
 
 target_include_directories(OpenImageDenoise_common
   PUBLIC
+    $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/external>
     $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>

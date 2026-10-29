@@ -7,7 +7,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "config.h"
+// Qualified path so the generated config.h is found via the include dirs when
+// building in-tree (it is generated into the build tree); for installed
+// headers it resolves to the sibling file as before.
+#include "OpenImageDenoise/config.h"
 
 #if defined(__cplusplus)
   #if defined(SYCL_LANGUAGE_VERSION)
@@ -89,6 +92,7 @@ typedef enum
   OIDN_DEVICE_TYPE_CUDA  = 3, // CUDA device
   OIDN_DEVICE_TYPE_HIP   = 4, // HIP device
   OIDN_DEVICE_TYPE_METAL = 5, // Metal device
+  OIDN_DEVICE_TYPE_WGPU  = 6, // WebGPU device (experimental)
 } OIDNDeviceType;
 
 // Error codes
@@ -125,6 +129,9 @@ OIDN_API bool oidnIsHIPDeviceSupported(int deviceID);
 
 // Returns whether the specified Metal device is supported.
 OIDN_API bool oidnIsMetalDeviceSupported(MTLDevice_id device);
+
+// Returns whether the WebGPU backend is available.
+OIDN_API bool oidnIsWebGPUDeviceSupported(void);
 
 // Creates a device of the specified type.
 OIDN_API OIDNDevice oidnNewDevice(OIDNDeviceType type);

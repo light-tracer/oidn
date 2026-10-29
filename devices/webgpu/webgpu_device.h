@@ -1,0 +1,38 @@
+#pragma once
+#include "core/device.h"
+#include "webgpu_engine.h"
+#include <webgpu/webgpu.h>
+
+OIDN_NAMESPACE_BEGIN
+
+  class WebGPUDevice : public Device
+  {
+  public:
+    WebGPUDevice();
+    ~WebGPUDevice();
+
+    DeviceType getType() const override { return DeviceType::WGPU; }
+
+    void submit(WGPUCommandBuffer cmdBuf);
+    void sync();
+
+    // Blocks until the future completes (web builds only; no-op on native,
+    // where the blocking polls in sync() are used instead)
+    void waitFuture(WGPUFuture future);
+
+    WGPUBuffer createBuffer(size_t byteSize, WGPUBufferUsage usage,
+                            const void* initData = nullptr);
+
+  protected:
+    void init() override;
+    void wait() override;
+    void flush() override;
+
+  public:
+    WGPUInstance instance = nullptr;
+    WGPUAdapter  adapter  = nullptr;
+    WGPUDevice   device   = nullptr;
+    WGPUQueue    queue    = nullptr;
+  };
+
+OIDN_NAMESPACE_END

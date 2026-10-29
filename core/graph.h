@@ -73,7 +73,7 @@ OIDN_NAMESPACE_BEGIN
     // not need any memory legitimately has a null pointer, so it is not considered lost.
     bool isScratchLost() const
     {
-      return scratch && scratch->getByteSize() > 0 && scratch->getPtr() == nullptr;
+      return scratch && !scratch->isValid();
     }
 
     size_t getWorkAmount() const override { return workAmount; }
