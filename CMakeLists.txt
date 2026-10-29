@@ -35,6 +35,23 @@ elseif(OIDN_ARCH STREQUAL "ARM64")
   option(OIDN_DEVICE_METAL "Enable Metal device." OFF)
 endif()
 option(OIDN_DEVICE_WEBGPU "Enable WebGPU device." OFF)
+set(OIDN_WEBGPU_PROVIDER "NATIVE" CACHE STRING "WebGPU provider: NATIVE or EXTERNAL")
+set_property(CACHE OIDN_WEBGPU_PROVIDER PROPERTY STRINGS NATIVE EXTERNAL)
+set(OIDN_WEBGPU_PROVIDER_TARGET "" CACHE STRING "Application WebGPU C API target")
+option(OIDN_WEBGPU_STANDALONE "Build standalone WebGPU device and browser demo" ON)
+option(OIDN_WEBGPU_TESTS "Build CPU-reference WebGPU tests" ON)
+option(OIDN_ENABLE_RTLIGHTMAP "Build the RTLightmap filter implementation" ON)
+if(OIDN_WEBGPU_PROVIDER STREQUAL "EXTERNAL")
+  if(NOT OIDN_STATIC_LIB)
+    message(FATAL_ERROR "The external WebGPU provider requires OIDN_STATIC_LIB=ON")
+  endif()
+  if(NOT TARGET "${OIDN_WEBGPU_PROVIDER_TARGET}")
+    message(FATAL_ERROR "OIDN_WEBGPU_PROVIDER_TARGET must name the application's WebGPU target")
+  endif()
+  add_library(oidn_webgpu_provider INTERFACE IMPORTED GLOBAL)
+  set_property(TARGET oidn_webgpu_provider PROPERTY INTERFACE_LINK_LIBRARIES "${OIDN_WEBGPU_PROVIDER_TARGET}")
+  add_compile_definitions(OIDN_WEBGPU_EXTERNAL_ONLY)
+endif()
 
 # Filters
 option(OIDN_FILTER_RT "Include trained weights of the RT filter." ON)
@@ -79,7 +96,7 @@ if(OIDN_FILTER_RT)
   )
 endif()
 
-if(OIDN_FILTER_RTLIGHTMAP)
+if(OIDN_FILTER_RTLIGHTMAP AND OIDN_ENABLE_RTLIGHTMAP)
   list(APPEND OIDN_WEIGHTS
     weights/rtlightmap_hdr.tza
     weights/rtlightmap_dir.tza
@@ -97,7 +114,7 @@ endif()
 ## Libraries
 ## -----------------------------------------------------------------------------
 
-if(OIDN_DEVICE_WEBGPU AND NOT EMSCRIPTEN)
+if(OIDN_DEVICE_WEBGPU AND NOT EMSCRIPTEN AND NOT OIDN_WEBGPU_PROVIDER STREQUAL "EXTERNAL")
   # Native builds download a prebuilt wgpu-native. The Emscripten/web build
   # gets WebGPU from the browser via the emdawnwebgpu port instead (wired up
   # in devices/webgpu/CMakeLists.txt).
@@ -111,7 +128,7 @@ add_subdirectory(devices)
 enable_testing()
 # The unit tests compare the WebGPU backend against the CPU backend, so they
 # require both devices to be enabled.
-if(OIDN_DEVICE_WEBGPU AND OIDN_DEVICE_CPU)
+if(OIDN_WEBGPU_TESTS AND OIDN_DEVICE_WEBGPU AND OIDN_DEVICE_CPU)
   add_subdirectory(tests)
 endif()
 
@@ -122,7 +139,7 @@ export(EXPORT OpenImageDenoise_Exports
 
 # Emscripten/WebAssembly build: a small wasm module + JS wrapper for running
 # the denoiser in a browser via WebGPU.
-if(EMSCRIPTEN)
+if(EMSCRIPTEN AND OIDN_WEBGPU_STANDALONE)
   add_subdirectory(web)
 endif()
 

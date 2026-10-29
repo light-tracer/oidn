@@ -34,7 +34,9 @@ OIDN_NAMESPACE_BEGIN
 
   class WebGPUEngine;
 
-#if defined(_WIN32)
+#if defined(OIDN_STATIC_LIB)
+  #define OIDN_WEBGPU_API
+#elif defined(_WIN32)
   #if defined(OpenImageDenoise_device_webgpu_EXPORTS)
     #define OIDN_WEBGPU_API __declspec(dllexport)
   #else

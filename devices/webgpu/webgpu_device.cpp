@@ -4,7 +4,7 @@
 #include <cstring>
 #include <iostream>
 
-#if !defined(__EMSCRIPTEN__)
+#if !defined(__EMSCRIPTEN__) && !defined(OIDN_WEBGPU_EXTERNAL_ONLY)
   // wgpu-native extension header (wgpuDevicePoll, wgpuSetLogCallback, ...);
   // not available in the browser (emdawnwebgpu) build
   #include <webgpu/wgpu.h>
@@ -12,6 +12,7 @@
 
 OIDN_NAMESPACE_BEGIN
 
+#if !defined(OIDN_WEBGPU_EXTERNAL_ONLY)
   static void handle_request_adapter(WGPURequestAdapterStatus status,
                                      WGPUAdapter adapter,
                                      WGPUStringView,
@@ -44,13 +45,15 @@ OIDN_NAMESPACE_BEGIN
     fflush(stderr);
   }
 
-#if !defined(__EMSCRIPTEN__)
+#if !defined(__EMSCRIPTEN__) && !defined(OIDN_WEBGPU_EXTERNAL_ONLY)
   static void handle_log(WGPULogLevel level, WGPUStringView message, void*)
   {
     fprintf(stderr, "wgpu log (%d): %.*s\n", (int)level,
             (int)message.length, message.data);
     fflush(stderr);
   }
+#endif
+
 #endif
 
   WebGPUDevice::WebGPUDevice() {}
@@ -65,6 +68,9 @@ OIDN_NAMESPACE_BEGIN
 
   void WebGPUDevice::init()
   {
+  #if defined(OIDN_WEBGPU_EXTERNAL_ONLY)
+    throw Exception(Error::InvalidOperation, "an external WebGPU context is required");
+  #else
   #if defined(__EMSCRIPTEN__)
     // The web build blocks on async operations with wgpuInstanceWaitAny
     // (awaiting the underlying promise via Asyncify), which must be enabled at
@@ -145,7 +151,7 @@ OIDN_NAMESPACE_BEGIN
       }
     }
 
-  #if !defined(__EMSCRIPTEN__)
+  #if !defined(__EMSCRIPTEN__) && !defined(OIDN_WEBGPU_EXTERNAL_ONLY)
     if (isVerbose(2))
     {
       wgpuSetLogCallback(handle_log, nullptr);
@@ -229,6 +235,7 @@ OIDN_NAMESPACE_BEGIN
       std::cout << "  DType   : " << (hasF16 ? "Float16" : "Float32") << std::endl;
 
     subdevices.emplace_back(new Subdevice(std::unique_ptr<Engine>(new WebGPUEngine(this))));
+  #endif
   }
 
   void WebGPUDevice::submit(WGPUCommandBuffer cmdBuf)
@@ -238,7 +245,9 @@ OIDN_NAMESPACE_BEGIN
 
   void WebGPUDevice::sync()
   {
-  #if defined(__EMSCRIPTEN__)
+  #if defined(OIDN_WEBGPU_EXTERNAL_ONLY)
+    throw Exception(Error::InvalidOperation, "wait for external WebGPU work through the application");
+  #elif defined(__EMSCRIPTEN__)
     // There is no blocking device poll in the browser: wait on a queue
     // work-done future instead (awaits the promise via Asyncify)
     WGPUQueueWorkDoneCallbackInfo cb{};
@@ -264,7 +273,7 @@ OIDN_NAMESPACE_BEGIN
 
   void WebGPUDevice::waitFuture(WGPUFuture future)
   {
-  #if defined(__EMSCRIPTEN__)
+  #if defined(__EMSCRIPTEN__) && !defined(OIDN_WEBGPU_EXTERNAL_ONLY)
     WGPUFutureWaitInfo info{};
     info.future = future;
     wgpuInstanceWaitAny(instance, 1, &info, UINT64_MAX);

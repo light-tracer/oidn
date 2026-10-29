@@ -15,7 +15,9 @@ set(OIDN_WEBGPU_SOURCES
   webgpu_module.cpp
   webgpu_helper.cpp)
 
-if(EMSCRIPTEN)
+if(OIDN_WEBGPU_PROVIDER STREQUAL "EXTERNAL")
+  set(OIDN_WEBGPU_LINK_TARGET oidn_webgpu_provider)
+elseif(EMSCRIPTEN)
   # On the web, WebGPU comes from the browser via Emscripten's emdawnwebgpu
   # port. Expose it through the same `wgpu_native` target name the rest of the
   # build links against, carrying the port flag as compile + link options.
@@ -25,6 +27,10 @@ if(EMSCRIPTEN)
   # It is a link dependency of the exported device target, so it must belong to
   # the export set as well
   install(TARGETS wgpu_native EXPORT OpenImageDenoise_Exports)
+endif()
+
+if(NOT OIDN_WEBGPU_LINK_TARGET)
+  set(OIDN_WEBGPU_LINK_TARGET wgpu_native)
 endif()
 
 add_library(OpenImageDenoise_device_webgpu ${OIDN_LIB_TYPE} ${OIDN_WEBGPU_SOURCES} ${OIDN_RESOURCE_FILE})
@@ -37,14 +43,17 @@ if(OIDN_LIBRARY_VERSIONED)
 endif()
 
 target_include_directories(OpenImageDenoise_device_webgpu PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/include)
-target_link_libraries(OpenImageDenoise_device_webgpu PRIVATE OpenImageDenoise_core wgpu_native)
+target_link_libraries(OpenImageDenoise_device_webgpu PRIVATE OpenImageDenoise_core ${OIDN_WEBGPU_LINK_TARGET})
 
 # The unit tests link against internal engine/arena symbols
-oidn_export_all_symbols(OpenImageDenoise_device_webgpu)
+if(NOT OIDN_STATIC_LIB)
+  oidn_export_all_symbols(OpenImageDenoise_device_webgpu)
+endif()
 
 if(OIDN_STATIC_LIB)
   oidn_install_static_module(OpenImageDenoise_device_webgpu)
   target_link_libraries(OpenImageDenoise PRIVATE OpenImageDenoise_device_webgpu)
+  add_library(OIDN::WebGPU_RT ALIAS OpenImageDenoise)
 else()
   oidn_install_module(OpenImageDenoise_device_webgpu)
 endif()

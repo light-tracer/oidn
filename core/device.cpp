@@ -317,8 +317,10 @@ OIDN_NAMESPACE_BEGIN
 
     if (type == "RT")
       filter = makeRef<RTFilter>(this);
+  #if defined(OIDN_ENABLE_RTLIGHTMAP)
     else if (type == "RTLightmap")
       filter = makeRef<RTLightmapFilter>(this);
+  #endif
     else
       throw Exception(Error::InvalidArgument, "unknown filter type: '" + type + "'");
 

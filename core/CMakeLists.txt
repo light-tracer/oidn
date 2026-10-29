@@ -55,8 +55,6 @@ set(OIDN_CORE_SOURCES
   ref.h
   rt_filter.h
   rt_filter.cpp
-  rtlightmap_filter.h
-  rtlightmap_filter.cpp
   semaphore.h
   subdevice.h
   subdevice.cpp
@@ -78,6 +76,10 @@ set(OIDN_CORE_SOURCES
   upsample.cpp
   vec.h
 )
+
+if(OIDN_ENABLE_RTLIGHTMAP)
+  list(APPEND OIDN_CORE_SOURCES rtlightmap_filter.h rtlightmap_filter.cpp)
+endif()
 
 # Fully static build is supported only for the CPU device
 if(OIDN_STATIC_LIB AND NOT OIDN_DEVICE_SYCL AND NOT OIDN_DEVICE_CUDA AND NOT OIDN_DEVICE_HIP)

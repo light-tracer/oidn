@@ -1,4 +1,5 @@
 #include "webgpu_engine.h"
+#include "webgpu_compat.h"
 #include "webgpu_device.h"
 #include "webgpu_buffer.h"
 #include "webgpu_heap.h"
@@ -530,31 +531,30 @@ OIDN_NAMESPACE_BEGIN
     if (!module)
     {
       const std::string code = specializeWGSL(tiled ? kConv2dTiledWGSL : kConv2dVec4WGSL, f16);
-      WGPUShaderSourceWGSL sourceV{};
+      OIDNWGSLSource sourceV{};
       sourceV.chain.next = nullptr;
-      sourceV.chain.sType = WGPUSType_ShaderSourceWGSL;
-      sourceV.code = { code.c_str(), code.size() };
+      oidnWGSLSource(sourceV, code.c_str());
 
       WGPUShaderModuleDescriptor smDescV{};
       smDescV.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&sourceV);
-      smDescV.label = { nullptr, 0 };
+      smDescV.label = {};
       module = wgpuDeviceCreateShaderModule(device->device, &smDescV);
     }
 
     WGPUConstantEntry constants[3] = {};
-    constants[0].key = { "IC4", WGPU_STRLEN }; constants[0].value = double(ic4);
-    constants[1].key = { "KH",  WGPU_STRLEN }; constants[1].value = double(kh);
-    constants[2].key = { "KW",  WGPU_STRLEN }; constants[2].value = double(kw);
+    constants[0].key = oidnWGPUEntryString("IC4"); constants[0].value = double(ic4);
+    constants[1].key = oidnWGPUEntryString("KH"); constants[1].value = double(kh);
+    constants[2].key = oidnWGPUEntryString("KW"); constants[2].value = double(kw);
 
     WGPUComputePipelineDescriptor cpDesc{};
     cpDesc.layout = scalar.pipelineLayout;
     cpDesc.compute.module = module;
-    WGPUStringView mainEntry{ "main", WGPU_STRLEN };
+    auto mainEntry = oidnWGPUEntryString("main");
     cpDesc.compute.entryPoint = mainEntry;
     cpDesc.compute.nextInChain = nullptr;
     cpDesc.compute.constantCount = 3;
     cpDesc.compute.constants = constants;
-    cpDesc.label = { nullptr, 0 };
+    cpDesc.label = {};
     WGPUComputePipeline newPipeline = wgpuDeviceCreateComputePipeline(device->device, &cpDesc);
 
     convVariantPipelines.emplace(key, newPipeline);
@@ -580,14 +580,13 @@ OIDN_NAMESPACE_BEGIN
     }
     )wgsl";
 
-    WGPUShaderSourceWGSL source{};
+    OIDNWGSLSource source{};
     source.chain.next = nullptr;
-    source.chain.sType = WGPUSType_ShaderSourceWGSL;
-    source.code = { kWGSL, strlen(kWGSL) };
+    oidnWGSLSource(source, kWGSL);
 
     WGPUShaderModuleDescriptor smDesc{};
     smDesc.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&source);
-    smDesc.label = { nullptr, 0 };
+    smDesc.label = {};
 
     addShaderModule = wgpuDeviceCreateShaderModule(device->device, &smDesc);
 
@@ -610,12 +609,12 @@ OIDN_NAMESPACE_BEGIN
     WGPUComputePipelineDescriptor cpDesc{};
     cpDesc.layout = addPipelineLayout;
     cpDesc.compute.module = addShaderModule;
-    WGPUStringView mainEntry{ "main", WGPU_STRLEN };
+    auto mainEntry = oidnWGPUEntryString("main");
     cpDesc.compute.entryPoint = mainEntry;
     cpDesc.compute.nextInChain = nullptr;
     cpDesc.compute.constantCount = 0;
     cpDesc.compute.constants = nullptr;
-    cpDesc.label = { nullptr, 0 };
+    cpDesc.label = {};
     addPipeline = wgpuDeviceCreateComputePipeline(device->device, &cpDesc);
   }
 
@@ -638,14 +637,13 @@ OIDN_NAMESPACE_BEGIN
     }
     )wgsl";
 
-    WGPUShaderSourceWGSL source{};
+    OIDNWGSLSource source{};
     source.chain.next = nullptr;
-    source.chain.sType = WGPUSType_ShaderSourceWGSL;
-    source.code = { kWGSL, strlen(kWGSL) };
+    oidnWGSLSource(source, kWGSL);
 
     WGPUShaderModuleDescriptor smDesc{};
     smDesc.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&source);
-    smDesc.label = { nullptr, 0 };
+    smDesc.label = {};
 
     mulShaderModule = wgpuDeviceCreateShaderModule(device->device, &smDesc);
 
@@ -668,12 +666,12 @@ OIDN_NAMESPACE_BEGIN
     WGPUComputePipelineDescriptor cpDesc{};
     cpDesc.layout = mulPipelineLayout;
     cpDesc.compute.module = mulShaderModule;
-    WGPUStringView mainEntry{ "main", WGPU_STRLEN };
+    auto mainEntry = oidnWGPUEntryString("main");
     cpDesc.compute.entryPoint = mainEntry;
     cpDesc.compute.nextInChain = nullptr;
     cpDesc.compute.constantCount = 0;
     cpDesc.compute.constants = nullptr;
-    cpDesc.label = { nullptr, 0 };
+    cpDesc.label = {};
     mulPipeline = wgpuDeviceCreateComputePipeline(device->device, &cpDesc);
   }
 
@@ -696,14 +694,13 @@ OIDN_NAMESPACE_BEGIN
     }
     )wgsl";
 
-    WGPUShaderSourceWGSL source{};
+    OIDNWGSLSource source{};
     source.chain.next = nullptr;
-    source.chain.sType = WGPUSType_ShaderSourceWGSL;
-    source.code = { kWGSL, strlen(kWGSL) };
+    oidnWGSLSource(source, kWGSL);
 
     WGPUShaderModuleDescriptor smDesc{};
     smDesc.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&source);
-    smDesc.label = { nullptr, 0 };
+    smDesc.label = {};
 
     softplusShaderModule = wgpuDeviceCreateShaderModule(device->device, &smDesc);
 
@@ -725,12 +722,12 @@ OIDN_NAMESPACE_BEGIN
     WGPUComputePipelineDescriptor cpDesc{};
     cpDesc.layout = softplusPipelineLayout;
     cpDesc.compute.module = softplusShaderModule;
-    WGPUStringView mainEntry{ "main", WGPU_STRLEN };
+    auto mainEntry = oidnWGPUEntryString("main");
     cpDesc.compute.entryPoint = mainEntry;
     cpDesc.compute.nextInChain = nullptr;
     cpDesc.compute.constantCount = 0;
     cpDesc.compute.constants = nullptr;
-    cpDesc.label = { nullptr, 0 };
+    cpDesc.label = {};
     softplusPipeline = wgpuDeviceCreateComputePipeline(device->device, &cpDesc);
   }
 
@@ -840,13 +837,12 @@ OIDN_NAMESPACE_BEGIN
 
     CachedPipeline cp;
 
-    WGPUShaderSourceWGSL source{};
+    OIDNWGSLSource source{};
     source.chain.next = nullptr;
-    source.chain.sType = WGPUSType_ShaderSourceWGSL;
-    source.code = { code.c_str(), code.size() };
+    oidnWGSLSource(source, code.c_str());
     WGPUShaderModuleDescriptor smDesc{};
     smDesc.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&source);
-    smDesc.label = { nullptr, 0 };
+    smDesc.label = {};
     cp.module = wgpuDeviceCreateShaderModule(device->device, &smDesc);
 
     std::vector<WGPUBindGroupLayoutEntry> entries(bindingTypes.size());
@@ -873,12 +869,12 @@ OIDN_NAMESPACE_BEGIN
     WGPUComputePipelineDescriptor cpDesc{};
     cpDesc.layout = cp.pipelineLayout;
     cpDesc.compute.module = cp.module;
-    WGPUStringView mainEntry{ "main", WGPU_STRLEN };
+    auto mainEntry = oidnWGPUEntryString("main");
     cpDesc.compute.entryPoint = mainEntry;
     cpDesc.compute.nextInChain = nullptr;
     cpDesc.compute.constantCount = 0;
     cpDesc.compute.constants = nullptr;
-    cpDesc.label = { nullptr, 0 };
+    cpDesc.label = {};
     cp.pipeline = wgpuDeviceCreateComputePipeline(device->device, &cpDesc);
 
     return pipelineCache.emplace(key, cp).first->second;
@@ -1142,6 +1138,7 @@ OIDN_NAMESPACE_BEGIN
   {
     flush();
     device->sync();
+  #if !defined(OIDN_WEBGPU_EXTERNAL_ONLY)
     for (auto& rb : readbacks)
     {
       bool done = false;
@@ -1167,6 +1164,7 @@ OIDN_NAMESPACE_BEGIN
       wgpuBufferRelease(rb.readback);
     }
     readbacks.clear();
+  #endif
   }
 
 OIDN_NAMESPACE_END

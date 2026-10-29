@@ -61,6 +61,9 @@ OIDN_NAMESPACE_BEGIN
 
   void WebGPUBuffer::read(size_t byteOffset, size_t byteSize, void* dstHostPtr, SyncMode)
   {
+  #if defined(OIDN_WEBGPU_EXTERNAL_ONLY)
+    throw Exception(Error::InvalidOperation, "read external WebGPU resources through the application");
+  #else
     if (byteOffset + byteSize > this->byteSize)
       throw Exception(Error::InvalidArgument, "buffer region is out of bounds");
     if (dstHostPtr == nullptr && byteSize > 0)
@@ -109,6 +112,7 @@ OIDN_NAMESPACE_BEGIN
     std::memcpy(dstHostPtr, wgpuBufferGetConstMappedRange(readback,0,copySize), byteSize);
     wgpuBufferUnmap(readback);
     wgpuBufferRelease(readback);
+  #endif
   }
 
   void WebGPUBuffer::write(size_t byteOffset, size_t byteSize, const void* srcHostPtr, SyncMode)

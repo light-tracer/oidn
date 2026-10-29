@@ -83,3 +83,4 @@
 
 #cmakedefine OIDN_FILTER_RT
 #cmakedefine OIDN_FILTER_RTLIGHTMAP
+#cmakedefine OIDN_ENABLE_RTLIGHTMAP
