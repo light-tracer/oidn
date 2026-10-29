@@ -34,7 +34,9 @@ Copy the generated `regression-data/` directory and `weights/rt_ldr.tza` and
 application creates the only device and submits both encoders. The C++ side
 imports that device and uses the same Emscripten resource managers as LT.
 
-The browser requests shader-f16 when available; the FP32 fallback is selected
+The browser runs both buffer and texture cases, checks alpha, and releases the
+application's texture handles immediately after import to exercise manager
+reference counts. It requests shader-f16 when available; the FP32 fallback is selected
 by the application's device feature list. No hidden blocking read or queue wait
 is permitted in library code. Texture conversion buffers are GPU-only and are
 reused across frames; direct fusion with network I/O is a future optimization.

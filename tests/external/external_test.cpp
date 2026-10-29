@@ -141,6 +141,15 @@ int main(int argc, char** argv) try
   OIDNBuffer out = oidnNewSharedBufferFromWebGPU(oidn, &desc);
   check(oidn);
   require(in && out, "import failed");
+  OIDNWebGPUBufferDesc invalid=desc;
+  invalid.byteOffset=bytes+4;
+  require(!oidnNewSharedBufferFromWebGPU(oidn,&invalid),"out-of-range import was accepted");
+  require(oidnGetDeviceError(oidn,nullptr)==OIDN_ERROR_INVALID_ARGUMENT,"wrong import error");
+  WGPUBuffer noStorage=buffer(device,256,WGPUBufferUsage_CopySrc);
+  invalid={sizeof(invalid),noStorage,0,0};
+  require(!oidnNewSharedBufferFromWebGPU(oidn,&invalid),"missing storage usage was accepted");
+  require(oidnGetDeviceError(oidn,nullptr)==OIDN_ERROR_INVALID_ARGUMENT,"wrong storage error");
+  wgpuBufferRelease(noStorage);
   OIDNFilter filter = oidnNewFilter(oidn, "RT");
   oidnSetFilterImage(filter, "color", in, OIDN_FORMAT_FLOAT3, width, height, 0, pixelStride, rowStride);
   oidnSetFilterImage(filter, "output", out, OIDN_FORMAT_FLOAT3, width, height, 0, pixelStride, rowStride);
@@ -176,6 +185,8 @@ int main(int argc, char** argv) try
   oidnSetSharedFilterData(filter, "weights", weights.data(), weights.size());
   require(oidnPrepareFilterWebGPU(filter), "prepare failed");
   check(oidn);
+  require(!oidnEncodeFilterWebGPU(filter,nullptr),"null encoder was accepted");
+  require(oidnGetDeviceError(oidn,nullptr)==OIDN_ERROR_INVALID_OPERATION,"wrong encoder error");
 
   WGPUCommandBuffer commands[2]{};
   WGPUBuffer readback[2]{};

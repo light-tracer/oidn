@@ -74,12 +74,21 @@ OIDN_NAMESPACE_BEGIN
     if (desc.alphaSource) alpha = makeView(desc.alphaSource, 0, 0);
     pipeline(output);
     if (alpha) pipeline(false);
+  #if defined(OIDN_WEBGPU_LEGACY_BROWSER)
+    wgpuTextureReference(desc.texture);
+    if (desc.alphaSource) wgpuTextureReference(desc.alphaSource);
+  #else
+    wgpuTextureAddRef(desc.texture);
+    if (desc.alphaSource) wgpuTextureAddRef(desc.alphaSource);
+  #endif
   }
 
   WebGPUTextureBuffer::~WebGPUTextureBuffer()
   {
     if (alpha) wgpuTextureViewRelease(alpha);
     if (view) wgpuTextureViewRelease(view);
+    if (desc.alphaSource) wgpuTextureRelease(desc.alphaSource);
+    wgpuTextureRelease(desc.texture);
   }
 
   const WebGPUEngine::CachedPipeline& WebGPUTextureBuffer::pipeline(bool write)

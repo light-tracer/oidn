@@ -33,4 +33,15 @@ OIDN_NAMESPACE_BEGIN
     return tensorMap;
   }
 
+  std::shared_ptr<TensorMap> Subdevice::getCachedUserTensors(const Data& weights)
+  {
+    // Key by bytes, not pointer identity: oidnUpdateFilterData allows callers
+    // to change a shared blob in place. A cache hit therefore cannot reuse a
+    // reordered tensor from an older version at the same address.
+    std::string snapshot(static_cast<const char*>(weights.ptr), weights.size);
+    auto& tensors = cachedUserTensors[std::move(snapshot)];
+    if (!tensors) tensors = std::make_shared<TensorMap>();
+    return tensors;
+  }
+
 OIDN_NAMESPACE_END

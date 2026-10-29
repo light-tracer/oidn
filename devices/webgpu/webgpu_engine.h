@@ -33,6 +33,7 @@ OIDN_NAMESPACE_BEGIN
     ~WebGPUEngine();
 
     Device* getDevice() const override;
+    bool cacheUserWeights() const override;
 
     // Heap / Buffer
     SizeAndAlignment getBufferByteSizeAndAlignment(size_t byteSize, Storage storage) override;

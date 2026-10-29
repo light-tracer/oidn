@@ -373,6 +373,8 @@ OIDN_NAMESPACE_BEGIN
   WebGPUEngine::WebGPUEngine(WebGPUDevice* device)
     : device(device) {}
 
+  bool WebGPUEngine::cacheUserWeights() const { return device->isExternal(); }
+
   WebGPUEngine::~WebGPUEngine()
   {
     if (pendingEncoder)   wgpuCommandEncoderRelease(pendingEncoder);
@@ -827,6 +829,8 @@ OIDN_NAMESPACE_BEGIN
   WGPUCommandEncoder WebGPUEngine::getEncoder()
   {
     if (externalEncoder) return externalEncoder;
+    if (device->isExternal())
+      throw Exception(Error::InvalidOperation, "use oidnEncodeFilterWebGPU with an application encoder");
     if (!pendingEncoder)
       pendingEncoder = wgpuDeviceCreateCommandEncoder(device->device, nullptr);
     return pendingEncoder;

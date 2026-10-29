@@ -41,6 +41,8 @@ OIDN_NAMESPACE_BEGIN
     virtual ~Engine() = default;
 
     virtual Device* getDevice() const = 0;
+    // Content-addressed snapshots permit caching mutable user blobs safely.
+    virtual bool cacheUserWeights() const { return false; }
     Subdevice* getSubdevice() const { return subdevice; }
     void setSubdevice(Subdevice* subdevice); // set once by Subdevice
 

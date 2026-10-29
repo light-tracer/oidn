@@ -23,6 +23,7 @@ OIDN_NAMESPACE_BEGIN
 
     // Tensor cache
     std::shared_ptr<TensorMap> getCachedTensors(const void* key);
+    std::shared_ptr<TensorMap> getCachedUserTensors(const Data& weights);
 
   private:
     // Disable copying
@@ -34,6 +35,7 @@ OIDN_NAMESPACE_BEGIN
     // Resources
     std::unique_ptr<ScratchArenaManager> scratchArenaManager;
     std::unordered_map<const void*, std::shared_ptr<TensorMap>> cachedTensors; // cached weights
+    std::unordered_map<std::string, std::shared_ptr<TensorMap>> cachedUserTensors;
   };
 
 OIDN_NAMESPACE_END

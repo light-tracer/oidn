@@ -24,26 +24,46 @@ document.querySelector('#run').onclick = async () => {
   const module = await createOIDNTest({preinitializedWebGPUDevice:device, print:log, printErr:log});
   require(module._oidnTestInit(), 'init failed');
   const cases = await (await fetch('regression-data/cases.json')).json();
-  for (const test of cases) {
+  const blobs=[];
+  for (const transport of ['buffer','texture']) for (const test of cases) {
     const input = await fetchBytes('regression-data/' + test.name + '.bin');
     const reference = new Float32Array((await fetchBytes('regression-data/' + test.name + '-cpu.bin')).buffer);
     const weights = await fetchBytes('weights/' + test.weights);
-    const color = device.createBuffer({size:input.length, usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
-    const output = device.createBuffer({size:input.length, usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
-    device.queue.writeBuffer(color, 0, input);
+    let color,output,pitch,bytes;
+    if (transport === 'buffer') {
+      color = device.createBuffer({size:input.length, usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
+      output = device.createBuffer({size:input.length, usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
+      device.queue.writeBuffer(color,0,input);
+      bytes=input.length;
+    } else {
+      color=device.createTexture({size:[test.width,test.height],format:'rgba32float',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
+      output=device.createTexture({size:[test.width,test.height],format:'rgba32float',usage:GPUTextureUsage.STORAGE_BINDING|GPUTextureUsage.COPY_SRC});
+      pitch=Math.ceil(test.width*16/256)*256; bytes=pitch*test.height;
+      const pixels=new Float32Array(bytes/4), source=new Float32Array(input.buffer);
+      for(let y=0;y<test.height;++y) for(let x=0;x<test.width;++x) {
+        const index=y*pitch/4+x*4, src=(y*test.width+x)*3;
+        pixels.set(source.subarray(src,src+3),index); pixels[index+3]=.375;
+      }
+      device.queue.writeTexture({texture:color},pixels,{bytesPerRow:pitch},[test.width,test.height]);
+    }
     const weightsPtr = module._oidnTestAlloc(weights.length);
+    blobs.push(weightsPtr);
     module.HEAPU8.set(weights, weightsPtr);
-    const colorHandle = module.importBuffer(color), outputHandle = module.importBuffer(output);
-    require(module._oidnTestPrepare(colorHandle, outputHandle, weightsPtr, weights.length, test.width, test.height, test.hdr), 'prepare failed');
-    module.releaseBuffer(colorHandle); module.releaseBuffer(outputHandle);
+    const colorHandle = transport==='buffer'?module.importBuffer(color):module.importTexture(color);
+    const outputHandle = transport==='buffer'?module.importBuffer(output):module.importTexture(output);
+    const prepare=transport==='buffer'?module._oidnTestPrepare:module._oidnTestPrepareTexture;
+    require(prepare(colorHandle, outputHandle, weightsPtr, weights.length, test.width, test.height, test.hdr), 'prepare failed');
+    const release=transport==='buffer'?module.releaseBuffer:module.releaseTexture;
+    release(colorHandle); release(outputHandle);
     const encoders = [], readbacks = [];
     for (let i = 0; i < 2; ++i) {
       const encoder = device.createCommandEncoder();
       const encoderHandle = module.importEncoder(encoder);
       require(module._oidnTestEncode(encoderHandle), 'encode failed');
       module.releaseEncoder(encoderHandle);
-      const readback = device.createBuffer({size:input.length, usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
-      encoder.copyBufferToBuffer(output, 0, readback, 0, input.length);
+      const readback = device.createBuffer({size:bytes, usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+      if(transport==='buffer') encoder.copyBufferToBuffer(output, 0, readback, 0, bytes);
+      else encoder.copyTextureToBuffer({texture:output},{buffer:readback,bytesPerRow:pitch},[test.width,test.height]);
       encoders.push(encoder.finish()); readbacks.push(readback);
     }
     device.queue.submit(encoders);
@@ -51,15 +71,19 @@ document.querySelector('#run').onclick = async () => {
       await readback.mapAsync(GPUMapMode.READ);
       const values = new Float32Array(readback.getMappedRange());
       let error = 0, outliers = 0;
-      for (let i = 0; i < values.length; ++i) {
-        require(Number.isFinite(values[i]), 'non-finite output');
-        const absolute = Math.abs(values[i]-reference[i]);
-        const relative = absolute/(Math.abs(values[i])+Math.abs(reference[i])+.01);
+      for (let i = 0; i < reference.length; ++i) {
+        const pixel=Math.floor(i/3), x=pixel%test.width,y=Math.floor(pixel/test.width);
+        const index=transport==='buffer'?i:y*pitch/4+x*4+i%3;
+        const value=values[index];
+        require(Number.isFinite(value), 'non-finite output');
+        if(transport==='texture') require(values[y*pitch/4+x*4+3]===.375,'alpha changed');
+        const absolute = Math.abs(value-reference[i]);
+        const relative = absolute/(Math.abs(value)+Math.abs(reference[i])+.01);
         error += relative;
         outliers += absolute > .02 && relative > .05;
       }
-      error /= values.length;
-      log(JSON.stringify({case:test.name, features, relativeMean:error, outliers}));
+      error /= reference.length;
+      log(JSON.stringify({case:test.name,transport,features,relativeMean:error,outliers}));
       require(error <= .003 && outliers === 0, 'CPU parity failed');
       readback.unmap(); readback.destroy();
     }
@@ -67,6 +91,8 @@ document.querySelector('#run').onclick = async () => {
     // alive here. Three small fixtures are intentional for this harness.
   }
   require(errors.length === 0, 'WebGPU validation errors');
+  module._oidnTestShutdown();
+  for(const blob of blobs) module._oidnTestFree(blob);
   log('PASS: one application device, two encoders before submit, no Asyncify');
  } catch (error) { log('FAIL: ' + error.stack); }
 };

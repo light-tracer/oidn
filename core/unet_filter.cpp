@@ -292,9 +292,8 @@ OIDN_NAMESPACE_BEGIN
     {
       Engine* engine = device->getEngine(i);
 
-      // We can use cached weights only for built-in weights because user weights may change!
-      auto cachedConstTensors =
-        userWeightsBlob ? nullptr : engine->getSubdevice()->getCachedTensors(weightsBlob.ptr);
+      auto cachedConstTensors = !userWeightsBlob ? engine->getSubdevice()->getCachedTensors(weightsBlob.ptr) :
+        engine->cacheUserWeights() ? engine->getSubdevice()->getCachedUserTensors(weightsBlob) : nullptr;
 
       instances.emplace_back();
       instances.back().graph = makeRef<Graph>(engine, constTensors, cachedConstTensors, fastMath);
