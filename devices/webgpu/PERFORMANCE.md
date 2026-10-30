@@ -1,4 +1,4 @@
-# WebGPU backend â€” performance notes
+# WebGPU backend - performance notes
 
 ## Shared Dawn investigation, 2026-10-30
 

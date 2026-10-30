@@ -862,5 +862,617 @@
       "median_cpu_ms": 1.1214,
       "note": "maxMemoryMB=-1 (LT default); one tile; final uses implicit GEMM and separate pooling; old-kernels restores prior kernel policy only."
     }
+  },
+  "browser": {
+    "f16": {
+      "one_application_device_for_entire_sweep": true,
+      "samples": [
+        {
+          "case": "odd-srgb",
+          "transport": "buffer",
+          "memoryMB": -1,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.000283270404422981,
+          "outliers": 0,
+          "cpuEncodeMS": 0.7000000029802322,
+          "gpuMS": 9.895936
+        },
+        {
+          "case": "odd-srgb",
+          "transport": "buffer",
+          "memoryMB": -1,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.000283270404422981,
+          "outliers": 0,
+          "cpuEncodeMS": 0.5,
+          "gpuMS": 11.403264
+        },
+        {
+          "case": "odd-hdr",
+          "transport": "buffer",
+          "memoryMB": -1,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.0004587683655326594,
+          "outliers": 0,
+          "cpuEncodeMS": 0.5,
+          "gpuMS": 9.633792
+        },
+        {
+          "case": "odd-hdr",
+          "transport": "buffer",
+          "memoryMB": -1,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.0004587683655326594,
+          "outliers": 0,
+          "cpuEncodeMS": 0.3999999910593033,
+          "gpuMS": 10.682368
+        },
+        {
+          "case": "tiled-hdr",
+          "transport": "buffer",
+          "memoryMB": 512,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.0004549435016439022,
+          "outliers": 0,
+          "cpuEncodeMS": 0.5,
+          "gpuMS": 124.583936
+        },
+        {
+          "case": "tiled-hdr",
+          "transport": "buffer",
+          "memoryMB": 64,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.0004552353473466857,
+          "outliers": 0,
+          "cpuEncodeMS": 2.2999999970197678,
+          "gpuMS": 278.396928
+        },
+        {
+          "case": "odd-srgb",
+          "transport": "texture",
+          "memoryMB": -1,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.000283270404422981,
+          "outliers": 0,
+          "cpuEncodeMS": 2.7000000029802322,
+          "gpuMS": 10.027008
+        },
+        {
+          "case": "odd-srgb",
+          "transport": "texture",
+          "memoryMB": -1,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.000283270404422981,
+          "outliers": 0,
+          "cpuEncodeMS": 4.199999988079071,
+          "gpuMS": 9.17504
+        },
+        {
+          "case": "odd-hdr",
+          "transport": "texture",
+          "memoryMB": -1,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.0004587683655326594,
+          "outliers": 0,
+          "cpuEncodeMS": 0.3999999910593033,
+          "gpuMS": 9.50272
+        },
+        {
+          "case": "odd-hdr",
+          "transport": "texture",
+          "memoryMB": -1,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.0004587683655326594,
+          "outliers": 0,
+          "cpuEncodeMS": 0.19999998807907104,
+          "gpuMS": 9.17504
+        },
+        {
+          "case": "tiled-hdr",
+          "transport": "texture",
+          "memoryMB": 512,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.0004549435016439022,
+          "outliers": 0,
+          "cpuEncodeMS": 1.300000011920929,
+          "gpuMS": 120.651776
+        },
+        {
+          "case": "tiled-hdr",
+          "transport": "texture",
+          "memoryMB": 64,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.0004552353473466857,
+          "outliers": 0,
+          "cpuEncodeMS": 1.9000000059604645,
+          "gpuMS": 281.673728
+        },
+        {
+          "case": "odd-srgb",
+          "transport": "buffer-alias",
+          "memoryMB": -1,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.000283270404422981,
+          "outliers": 0,
+          "cpuEncodeMS": 1,
+          "gpuMS": 9.50272
+        },
+        {
+          "case": "odd-srgb",
+          "transport": "buffer-alias",
+          "memoryMB": -1,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.000283270404422981,
+          "outliers": 0,
+          "cpuEncodeMS": 1,
+          "gpuMS": 9.17504
+        },
+        {
+          "case": "odd-hdr",
+          "transport": "buffer-alias",
+          "memoryMB": -1,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.0004587683655326594,
+          "outliers": 0,
+          "cpuEncodeMS": 1.3999999910593033,
+          "gpuMS": 9.895936
+        },
+        {
+          "case": "odd-hdr",
+          "transport": "buffer-alias",
+          "memoryMB": -1,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.0004587683655326594,
+          "outliers": 0,
+          "cpuEncodeMS": 1.1000000089406967,
+          "gpuMS": 9.17504
+        },
+        {
+          "case": "tiled-hdr",
+          "transport": "buffer-alias",
+          "memoryMB": 512,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.0004549435016439022,
+          "outliers": 0,
+          "cpuEncodeMS": 2.0999999940395355,
+          "gpuMS": 125.960192
+        },
+        {
+          "case": "tiled-hdr",
+          "transport": "buffer-alias",
+          "memoryMB": 64,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.0004552353473466857,
+          "outliers": 0,
+          "cpuEncodeMS": 4.299999997019768,
+          "gpuMS": 281.280512
+        },
+        {
+          "case": "odd-srgb",
+          "transport": "texture-alias",
+          "memoryMB": -1,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.000283270404422981,
+          "outliers": 0,
+          "cpuEncodeMS": 1.1000000089406967,
+          "gpuMS": 9.764864
+        },
+        {
+          "case": "odd-srgb",
+          "transport": "texture-alias",
+          "memoryMB": -1,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.000283270404422981,
+          "outliers": 0,
+          "cpuEncodeMS": 0.7999999970197678,
+          "gpuMS": 9.50272
+        },
+        {
+          "case": "odd-hdr",
+          "transport": "texture-alias",
+          "memoryMB": -1,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.0004587683655326594,
+          "outliers": 0,
+          "cpuEncodeMS": 0.3999999910593033,
+          "gpuMS": 9.961472
+        },
+        {
+          "case": "odd-hdr",
+          "transport": "texture-alias",
+          "memoryMB": -1,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.0004587683655326594,
+          "outliers": 0,
+          "cpuEncodeMS": 0.20000000298023224,
+          "gpuMS": 9.764864
+        },
+        {
+          "case": "tiled-hdr",
+          "transport": "texture-alias",
+          "memoryMB": 512,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.0004549435016439022,
+          "outliers": 0,
+          "cpuEncodeMS": 0.8999999910593033,
+          "gpuMS": 126.287872
+        },
+        {
+          "case": "tiled-hdr",
+          "transport": "texture-alias",
+          "memoryMB": 64,
+          "features": [
+            "shader-f16",
+            "timestamp-query"
+          ],
+          "relativeMean": 0.0004552353473466857,
+          "outliers": 0,
+          "cpuEncodeMS": 2.800000011920929,
+          "gpuMS": 278.790144
+        }
+      ]
+    },
+    "f32": {
+      "one_application_device_for_entire_sweep": true,
+      "samples": [
+        {
+          "case": "odd-srgb",
+          "transport": "buffer",
+          "memoryMB": -1,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 3.589803826915125e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 2.4000000059604645,
+          "gpuMS": 11.14112
+        },
+        {
+          "case": "odd-srgb",
+          "transport": "buffer",
+          "memoryMB": -1,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 3.589803826915125e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 1.5,
+          "gpuMS": 10.616832
+        },
+        {
+          "case": "odd-hdr",
+          "transport": "buffer",
+          "memoryMB": -1,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 5.391591996702289e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 0.6000000089406967,
+          "gpuMS": 10.878976
+        },
+        {
+          "case": "odd-hdr",
+          "transport": "buffer",
+          "memoryMB": -1,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 5.391591996702289e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 1.5,
+          "gpuMS": 11.206656
+        },
+        {
+          "case": "tiled-hdr",
+          "transport": "buffer",
+          "memoryMB": 512,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 5.426375345043273e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 0.8999999910593033,
+          "gpuMS": 200.86784
+        },
+        {
+          "case": "tiled-hdr",
+          "transport": "buffer",
+          "memoryMB": 64,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 5.426375345043273e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 1.199999988079071,
+          "gpuMS": 306.05312
+        },
+        {
+          "case": "odd-srgb",
+          "transport": "texture",
+          "memoryMB": -1,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 3.589803826915125e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 1.0999999940395355,
+          "gpuMS": 10.878976
+        },
+        {
+          "case": "odd-srgb",
+          "transport": "texture",
+          "memoryMB": -1,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 3.589803826915125e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 2.2999999970197678,
+          "gpuMS": 10.551296
+        },
+        {
+          "case": "odd-hdr",
+          "transport": "texture",
+          "memoryMB": -1,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 5.391591996702289e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 0.5999999940395355,
+          "gpuMS": 10.223616
+        },
+        {
+          "case": "odd-hdr",
+          "transport": "texture",
+          "memoryMB": -1,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 5.391591996702289e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 0.6000000089406967,
+          "gpuMS": 11.14112
+        },
+        {
+          "case": "tiled-hdr",
+          "transport": "texture",
+          "memoryMB": 512,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 5.426375345043273e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 10.399999991059303,
+          "gpuMS": 202.113024
+        },
+        {
+          "case": "tiled-hdr",
+          "transport": "texture",
+          "memoryMB": 64,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 5.426375345043273e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 2.5,
+          "gpuMS": 305.39776
+        },
+        {
+          "case": "odd-srgb",
+          "transport": "buffer-alias",
+          "memoryMB": -1,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 3.589803826915125e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 1.4000000059604645,
+          "gpuMS": 12.255232
+        },
+        {
+          "case": "odd-srgb",
+          "transport": "buffer-alias",
+          "memoryMB": -1,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 3.589803826915125e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 1.7000000029802322,
+          "gpuMS": 11.599872
+        },
+        {
+          "case": "odd-hdr",
+          "transport": "buffer-alias",
+          "memoryMB": -1,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 5.391591996702289e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 3.3999999910593033,
+          "gpuMS": 11.272192
+        },
+        {
+          "case": "odd-hdr",
+          "transport": "buffer-alias",
+          "memoryMB": -1,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 5.391591996702289e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 1.2999999970197678,
+          "gpuMS": 10.15808
+        },
+        {
+          "case": "tiled-hdr",
+          "transport": "buffer-alias",
+          "memoryMB": 512,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 5.426375345043273e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 4.5999999940395355,
+          "gpuMS": 198.2464
+        },
+        {
+          "case": "tiled-hdr",
+          "transport": "buffer-alias",
+          "memoryMB": 64,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 5.426375345043273e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 2.4000000059604645,
+          "gpuMS": 308.084736
+        },
+        {
+          "case": "odd-srgb",
+          "transport": "texture-alias",
+          "memoryMB": -1,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 3.589803826915125e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 1.9000000059604645,
+          "gpuMS": 10.223616
+        },
+        {
+          "case": "odd-srgb",
+          "transport": "texture-alias",
+          "memoryMB": -1,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 3.589803826915125e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 0.5999999940395355,
+          "gpuMS": 10.878976
+        },
+        {
+          "case": "odd-hdr",
+          "transport": "texture-alias",
+          "memoryMB": -1,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 5.391591996702289e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 0.5999999940395355,
+          "gpuMS": 10.15808
+        },
+        {
+          "case": "odd-hdr",
+          "transport": "texture-alias",
+          "memoryMB": -1,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 5.391591996702289e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 0.5,
+          "gpuMS": 10.616832
+        },
+        {
+          "case": "tiled-hdr",
+          "transport": "texture-alias",
+          "memoryMB": 512,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 5.426375345043273e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 0.5,
+          "gpuMS": 204.537856
+        },
+        {
+          "case": "tiled-hdr",
+          "transport": "texture-alias",
+          "memoryMB": 64,
+          "features": [
+            "timestamp-query"
+          ],
+          "relativeMean": 5.426375345043273e-07,
+          "outliers": 0,
+          "cpuEncodeMS": 2.7999999970197678,
+          "gpuMS": 309.723136
+        }
+      ]
+    }
   }
 }
