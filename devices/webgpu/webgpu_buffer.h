@@ -1,6 +1,7 @@
 #pragma once
 #include "core/buffer.h"
 #include "webgpu_engine.h"
+#include "webgpu_compat.h"
 #include <webgpu/webgpu.h>
 
 OIDN_NAMESPACE_BEGIN
@@ -29,7 +30,7 @@ OIDN_NAMESPACE_BEGIN
     bool isShared() const override { return shared; }
     Storage getStorage() const override { return Storage::Device; }
     bool isValid() const override { return byteSize == 0 || buffer != nullptr; }
-    const void* getMemoryIdentity() const override { return buffer; }
+    const void* getMemoryIdentity() const override { return oidnWGPUBufferIdentity(buffer); }
     size_t getMemoryByteOffset() const override { return byteOffset; }
 
     void read(size_t byteOffset, size_t byteSize, void* dstHostPtr,

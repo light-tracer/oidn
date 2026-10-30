@@ -31,13 +31,36 @@ OIDN_NAMESPACE_BEGIN
       case WGPUTextureFormat_BGRA8Unorm: case WGPUTextureFormat_BGRA8UnormSrgb:
       case WGPUTextureFormat_R16Float: case WGPUTextureFormat_RG16Float: case WGPUTextureFormat_RGBA16Float:
       case WGPUTextureFormat_R32Float: case WGPUTextureFormat_RG32Float: case WGPUTextureFormat_RGBA32Float:
-      #if !defined(__EMSCRIPTEN__)
+      #if defined(OIDN_WEBGPU_EXTERNAL_ONLY) && !defined(__EMSCRIPTEN__)
       case WGPUTextureFormat_RGBA16Unorm:
       #endif
         break;
       default: throw Exception(Error::InvalidArgument, "unsupported WebGPU input texture format");
       }
     }
+  }
+
+  static size_t textureBufferSize(WebGPUEngine* engine, const OIDNWebGPUTextureDesc& desc, bool output)
+  {
+    validateTexture(desc.texture, desc.mipLevel, desc.arrayLayer, desc, output);
+    if (desc.alphaSource)
+    {
+      if (!output) throw Exception(Error::InvalidArgument, "alphaSource is only valid for output images");
+      validateTexture(desc.alphaSource, 0, 0, desc, false);
+    }
+    const size_t bytes = ImageDesc(Format::Float4, desc.width, desc.height).getByteSize();
+    auto* device = static_cast<WebGPUDevice*>(engine->getDevice());
+  #if defined(OIDN_WEBGPU_EXTERNAL_ONLY)
+    WGPUSupportedLimits supported{};
+    wgpuDeviceGetLimits(device->device, &supported);
+    const auto& limits = supported.limits;
+  #else
+    WGPULimits limits{};
+    wgpuDeviceGetLimits(device->device, &limits);
+  #endif
+    if (bytes > limits.maxStorageBufferBindingSize || bytes > limits.maxBufferSize)
+      throw Exception(Error::InvalidArgument, "WebGPU texture conversion exceeds device buffer limits");
+    return bytes;
   }
 
   static WGPUTextureView makeView(WGPUTexture texture, uint32_t mip, uint32_t layer)
@@ -52,7 +75,7 @@ OIDN_NAMESPACE_BEGIN
   }
 
   WebGPUTextureBuffer::WebGPUTextureBuffer(WebGPUEngine* engine, const OIDNWebGPUTextureDesc& desc, bool output)
-    : WebGPUBuffer(engine, ImageDesc(Format::Float4, desc.width, desc.height).getByteSize()),
+    : WebGPUBuffer(engine, textureBufferSize(engine, desc, output)),
       engine(engine), desc(desc), output(output)
   {
     validateTexture(desc.texture, desc.mipLevel, desc.arrayLayer, desc, output);

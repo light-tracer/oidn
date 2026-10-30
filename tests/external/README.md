@@ -17,7 +17,9 @@ ctest --test-dir build-lt --output-on-failure
 
 The native tests cover FP32, strided imported buffers, texture subregions,
 alpha/padding, two encoders before submit, destruction before submission, HDR
-autoexposure and tiled 1024x1024 execution. The harness alone reads back results.
+autoexposure and tiled 1024x1024 execution. The 333x197 LDR buffer test also
+records 1100 distinct uniforms into each of two unsubmitted encoders, crossing
+the uniform-page boundary. The harness alone reads back results.
 Use the executable's final `f16` argument to additionally test a provider with
 shader-f16 enabled. The LT native Dawn used here does not advertise that feature.
 
@@ -34,9 +36,14 @@ Copy the generated `regression-data/` directory and `weights/rt_ldr.tza` and
 application creates the only device and submits both encoders. The C++ side
 imports that device and uses the same Emscripten resource managers as LT.
 
-The browser runs both buffer and texture cases, checks alpha, and releases the
+The browser runs buffer, texture and in-place variants (24 CPU comparisons),
+including distinct C handles referring to the same JavaScript GPU object.
+It checks alpha and releases the
 application's texture handles immediately after import to exercise manager
 reference counts. It requests shader-f16 when available; the FP32 fallback is selected
 by the application's device feature list. No hidden blocking read or queue wait
 is permitted in library code. Texture conversion buffers are GPU-only and are
 reused across frames; direct fusion with network I/O is a future optimization.
+The 1024x1024 case changes the memory budget from 512 to 64 MB between encoders
+before either is submitted. Optional timestamp queries bracket only OIDN's GPU
+commands; warmup and GPU input restoration for in-place cases are excluded.

@@ -50,7 +50,7 @@ EMSCRIPTEN_KEEPALIVE bool oidnTestPrepare(WGPUBuffer color, WGPUBuffer output, v
   oidnSetFilterImage(filter, "output", out, OIDN_FORMAT_FLOAT3, width, height, 0, 0, 0);
   oidnSetFilterBool(filter, "hdr", hdr);
   oidnSetFilterBool(filter, "srgb", !hdr);
-  if (width >= 1024) oidnSetFilterInt(filter, "maxMemoryMB", 64);
+  if (width >= 1024) oidnSetFilterInt(filter, "maxMemoryMB", 512);
   oidnSetSharedFilterData(filter, "weights", weights, bytes);
   return oidnPrepareFilterWebGPU(filter) && check();
 }
@@ -70,11 +70,16 @@ EMSCRIPTEN_KEEPALIVE bool oidnTestPrepareTexture(WGPUTexture color,WGPUTexture o
   if(!oidnSetFilterImageFromWebGPUTexture(filter,"output",&desc)) return check() && false;
   oidnSetFilterBool(filter,"hdr",hdr);
   oidnSetFilterBool(filter,"srgb",!hdr);
-  if(width>=1024) oidnSetFilterInt(filter,"maxMemoryMB",64);
+  if(width>=1024) oidnSetFilterInt(filter,"maxMemoryMB",512);
   oidnSetSharedFilterData(filter,"weights",weights,bytes);
   return oidnPrepareFilterWebGPU(filter) && check();
 }
 EMSCRIPTEN_KEEPALIVE void* oidnTestAlloc(size_t bytes) { return std::malloc(bytes); }
+EMSCRIPTEN_KEEPALIVE bool oidnTestSetMemory(int megabytes)
+{
+  oidnSetFilterInt(filter,"maxMemoryMB",megabytes);
+  return oidnPrepareFilterWebGPU(filter) && check();
+}
 EMSCRIPTEN_KEEPALIVE void oidnTestFree(void* ptr) { std::free(ptr); }
 EMSCRIPTEN_KEEPALIVE void oidnTestShutdown()
 {

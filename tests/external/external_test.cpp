@@ -12,6 +12,7 @@
 #include <vector>
 
 static int validationErrors = 0;
+void testExternalUniforms(OIDNDevice, WGPUDevice, WGPUQueue, WGPUInstance);
 static void require(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
 static void check(OIDNDevice device)
 {
@@ -121,6 +122,8 @@ int main(int argc, char** argv) try
   oidnCommitDevice(oidn);
   check(oidn);
 
+  if (!textures && !hdr && width == 333) testExternalUniforms(oidn, device, queue, instance);
+
   // Imported views with an unaligned storage-binding base and padded float4 rows.
   const size_t pixelStride = 16;
   const size_t rowStride = textures ? ((width + 4) * 16 + 255) / 256 * 256 : width * 16 + 32;
@@ -181,7 +184,7 @@ int main(int argc, char** argv) try
   }
   oidnSetFilterBool(filter, "hdr", hdr);
   oidnSetFilterBool(filter, "srgb", !hdr);
-  if (width >= 1024) oidnSetFilterInt(filter, "maxMemoryMB", 64);
+  if (width >= 1024) oidnSetFilterInt(filter, "maxMemoryMB", 512);
   oidnSetSharedFilterData(filter, "weights", weights.data(), weights.size());
   require(oidnPrepareFilterWebGPU(filter), "prepare failed");
   check(oidn);
@@ -193,6 +196,14 @@ int main(int argc, char** argv) try
   const auto start = std::chrono::steady_clock::now();
   for (int i = 0; i < 2; ++i)
   {
+    if (i == 1 && width >= 1024)
+    {
+      // Change graph/tile uniforms while the first encoder is still unsubmitted.
+      // Reusing uniform slots would corrupt that earlier execution.
+      oidnSetFilterInt(filter, "maxMemoryMB", 64);
+      require(oidnPrepareFilterWebGPU(filter), "reprepare before submit failed");
+      check(oidn);
+    }
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device, nullptr);
     require(oidnEncodeFilterWebGPU(filter, encoder), "encode failed");
     check(oidn);

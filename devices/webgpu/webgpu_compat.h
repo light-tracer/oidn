@@ -1,5 +1,11 @@
 #pragma once
 #include <webgpu/webgpu.h>
+#include "common/platform.h"
+
+OIDN_NAMESPACE_BEGIN
+  const void* oidnWGPUBufferIdentity(WGPUBuffer buffer);
+  const void* oidnWGPUTextureIdentity(WGPUTexture texture);
+OIDN_NAMESPACE_END
 
 // Light Tracer's Dawn uses SupportedLimits and callback API 2. Its browser
 // bindings use Emscripten's older C API. Keep the provider ABI at this boundary.

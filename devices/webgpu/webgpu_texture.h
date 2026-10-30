@@ -12,7 +12,7 @@ OIDN_NAMESPACE_BEGIN
   public:
     WebGPUTextureBuffer(WebGPUEngine* engine, const OIDNWebGPUTextureDesc& desc, bool output);
     ~WebGPUTextureBuffer();
-    const void* getMemoryIdentity() const override { return desc.texture; }
+    const void* getMemoryIdentity() const override { return oidnWGPUTextureIdentity(desc.texture); }
     void readTexture();
     void initializeAlpha();
     void writeTexture();

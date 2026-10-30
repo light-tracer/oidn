@@ -2,6 +2,8 @@
 <meta charset="utf-8">
 <title>OIDN shared WebGPU provider regression</title>
 <button id="run">Run shared-device regression</button>
+<label><input id="f16" type="checkbox" checked> Request shader-f16</label>
+<label><input id="large" type="checkbox" checked> Include 1024x1024 cases</label>
 <pre id="log"></pre>
 <script src="oidn_external_test.js"></script>
 <script>
@@ -13,31 +15,46 @@ const fetchBytes = async path => {
   return new Uint8Array(await response.arrayBuffer());
 };
 document.querySelector('#run').onclick = async () => {
+ document.querySelector('#log').textContent = '';
+ document.querySelector('#run').disabled = true;
+ let device;
  try {
+  const cases = await (await fetch('regression-data/cases.json')).json();
+  // Bound this stress harness independently of browser GC of released GPU
+  // objects. Each transport uses one application device across all its cases.
+  for (const transport of ['buffer','texture','buffer-alias','texture-alias']) {
   const adapter = await navigator.gpu.requestAdapter({powerPreference:'high-performance'});
-  const features = adapter.features.has('shader-f16') ? ['shader-f16'] : [];
-  const device = await adapter.requestDevice({requiredFeatures:features, requiredLimits:{
+  const features = document.querySelector('#f16').checked && adapter.features.has('shader-f16') ? ['shader-f16'] : [];
+  const timestamps=adapter.features.has('timestamp-query');
+  if(timestamps) features.push('timestamp-query');
+  device = await adapter.requestDevice({requiredFeatures:features, requiredLimits:{
     maxBufferSize:adapter.limits.maxBufferSize,
     maxStorageBufferBindingSize:adapter.limits.maxStorageBufferBindingSize}});
   const errors = [];
   device.addEventListener('uncapturederror', e => { errors.push(e.error.message); log(e.error.message); });
   const module = await createOIDNTest({preinitializedWebGPUDevice:device, print:log, printErr:log});
   require(module._oidnTestInit(), 'init failed');
-  const cases = await (await fetch('regression-data/cases.json')).json();
   const blobs=[];
-  for (const transport of ['buffer','texture']) for (const test of cases) {
+  for (const test of cases) {
+    if(test.width>=1024 && !document.querySelector('#large').checked) continue;
+    log('Starting ' + test.name + ' ' + transport + ' ' + (features.includes('shader-f16')?'f16':'f32'));
+    const isBuffer=transport.startsWith('buffer'), alias=transport.endsWith('-alias');
     const input = await fetchBytes('regression-data/' + test.name + '.bin');
     const reference = new Float32Array((await fetchBytes('regression-data/' + test.name + '-cpu.bin')).buffer);
     const weights = await fetchBytes('weights/' + test.weights);
-    let color,output,pitch,bytes;
-    if (transport === 'buffer') {
-      color = device.createBuffer({size:input.length, usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
-      output = device.createBuffer({size:input.length, usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
+    let color,output,pitch,bytes,sourceData;
+    if (isBuffer) {
+      color = device.createBuffer({size:input.length, usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST|GPUBufferUsage.COPY_SRC});
+      output = alias ? color : device.createBuffer({size:input.length, usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
       device.queue.writeBuffer(color,0,input);
       bytes=input.length;
+      if(alias) {
+        sourceData=device.createBuffer({size:bytes,usage:GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST});
+        device.queue.writeBuffer(sourceData,0,input);
+      }
     } else {
-      color=device.createTexture({size:[test.width,test.height],format:'rgba32float',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
-      output=device.createTexture({size:[test.width,test.height],format:'rgba32float',usage:GPUTextureUsage.STORAGE_BINDING|GPUTextureUsage.COPY_SRC});
+      color=device.createTexture({size:[test.width,test.height],format:'rgba32float',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST|(alias?(GPUTextureUsage.STORAGE_BINDING|GPUTextureUsage.COPY_SRC):0)});
+      output=alias?color:device.createTexture({size:[test.width,test.height],format:'rgba32float',usage:GPUTextureUsage.STORAGE_BINDING|GPUTextureUsage.COPY_SRC});
       pitch=Math.ceil(test.width*16/256)*256; bytes=pitch*test.height;
       const pixels=new Float32Array(bytes/4), source=new Float32Array(input.buffer);
       for(let y=0;y<test.height;++y) for(let x=0;x<test.width;++x) {
@@ -45,55 +62,101 @@ document.querySelector('#run').onclick = async () => {
         pixels.set(source.subarray(src,src+3),index); pixels[index+3]=.375;
       }
       device.queue.writeTexture({texture:color},pixels,{bytesPerRow:pitch},[test.width,test.height]);
+      if(alias) {
+        sourceData=device.createBuffer({size:bytes,usage:GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST});
+        device.queue.writeBuffer(sourceData,0,pixels);
+      }
     }
     const weightsPtr = module._oidnTestAlloc(weights.length);
     blobs.push(weightsPtr);
     module.HEAPU8.set(weights, weightsPtr);
-    const colorHandle = transport==='buffer'?module.importBuffer(color):module.importTexture(color);
-    const outputHandle = transport==='buffer'?module.importBuffer(output):module.importTexture(output);
-    const prepare=transport==='buffer'?module._oidnTestPrepare:module._oidnTestPrepareTexture;
+    const colorHandle = isBuffer?module.importBuffer(color):module.importTexture(color);
+    const outputHandle = isBuffer?module.importBuffer(output):module.importTexture(output);
+    const prepare=isBuffer?module._oidnTestPrepare:module._oidnTestPrepareTexture;
     require(prepare(colorHandle, outputHandle, weightsPtr, weights.length, test.width, test.height, test.hdr), 'prepare failed');
-    const release=transport==='buffer'?module.releaseBuffer:module.releaseTexture;
+    const release=isBuffer?module.releaseBuffer:module.releaseTexture;
     release(colorHandle); release(outputHandle);
-    const encoders = [], readbacks = [];
+    // Compile/execute once before timing. This wait belongs to the test app;
+    // the OIDN encode API itself never waits or submits.
+    const warmup=device.createCommandEncoder();
+    const warmupHandle=module.importEncoder(warmup);
+    require(module._oidnTestEncode(warmupHandle),'warmup failed');
+    module.releaseEncoder(warmupHandle);
+    device.queue.submit([warmup.finish()]);
+    await device.queue.onSubmittedWorkDone();
+    const encoders = [], readbacks = [], timings=[];
     for (let i = 0; i < 2; ++i) {
+      if(i===1 && test.width>=1024) require(module._oidnTestSetMemory(64),'reprepare before submit failed');
       const encoder = device.createCommandEncoder();
+      if(alias) {
+        if(isBuffer) encoder.copyBufferToBuffer(sourceData,0,color,0,bytes);
+        else encoder.copyBufferToTexture({buffer:sourceData,bytesPerRow:pitch},{texture:color},[test.width,test.height]);
+      }
+      let query,queryBuffer,timeReadback;
+      if(timestamps) {
+        query=device.createQuerySet({type:'timestamp',count:2});
+        encoder.beginComputePass({timestampWrites:{querySet:query,beginningOfPassWriteIndex:0}}).end();
+      }
       const encoderHandle = module.importEncoder(encoder);
+      const start=performance.now();
       require(module._oidnTestEncode(encoderHandle), 'encode failed');
+      const cpuEncodeMS=performance.now()-start;
       module.releaseEncoder(encoderHandle);
+      if(timestamps) {
+        encoder.beginComputePass({timestampWrites:{querySet:query,endOfPassWriteIndex:1}}).end();
+        queryBuffer=device.createBuffer({size:16,usage:GPUBufferUsage.QUERY_RESOLVE|GPUBufferUsage.COPY_SRC});
+        timeReadback=device.createBuffer({size:16,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST});
+        encoder.resolveQuerySet(query,0,2,queryBuffer,0);
+        encoder.copyBufferToBuffer(queryBuffer,0,timeReadback,0,16);
+      }
+      timings.push({query,queryBuffer,timeReadback,cpuEncodeMS});
       const readback = device.createBuffer({size:bytes, usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
-      if(transport==='buffer') encoder.copyBufferToBuffer(output, 0, readback, 0, bytes);
+      if(isBuffer) encoder.copyBufferToBuffer(output, 0, readback, 0, bytes);
       else encoder.copyTextureToBuffer({texture:output},{buffer:readback,bytesPerRow:pitch},[test.width,test.height]);
       encoders.push(encoder.finish()); readbacks.push(readback);
     }
     device.queue.submit(encoders);
-    for (const readback of readbacks) {
+    for (const [index,readback] of readbacks.entries()) {
       await readback.mapAsync(GPUMapMode.READ);
       const values = new Float32Array(readback.getMappedRange());
       let error = 0, outliers = 0;
       for (let i = 0; i < reference.length; ++i) {
         const pixel=Math.floor(i/3), x=pixel%test.width,y=Math.floor(pixel/test.width);
-        const index=transport==='buffer'?i:y*pitch/4+x*4+i%3;
+        const index=isBuffer?i:y*pitch/4+x*4+i%3;
         const value=values[index];
         require(Number.isFinite(value), 'non-finite output');
-        if(transport==='texture') require(values[y*pitch/4+x*4+3]===.375,'alpha changed');
+        if(!isBuffer) require(values[y*pitch/4+x*4+3]===.375,'alpha changed');
         const absolute = Math.abs(value-reference[i]);
         const relative = absolute/(Math.abs(value)+Math.abs(reference[i])+.01);
         error += relative;
         outliers += absolute > .02 && relative > .05;
       }
       error /= reference.length;
-      log(JSON.stringify({case:test.name,transport,features,relativeMean:error,outliers}));
+      const timing=timings[index];
+      let gpuMS=null;
+      if(timing.timeReadback) {
+        await timing.timeReadback.mapAsync(GPUMapMode.READ);
+        const values=new BigUint64Array(timing.timeReadback.getMappedRange());
+        gpuMS=Number(values[1]-values[0])/1e6;
+        timing.timeReadback.unmap(); timing.timeReadback.destroy();
+        timing.query.destroy(); timing.queryBuffer.destroy();
+      }
+      const memoryMB=test.width>=1024?(index===0?512:64):-1;
+      log(JSON.stringify({case:test.name,transport,memoryMB,features,relativeMean:error,outliers,cpuEncodeMS:timing.cpuEncodeMS,gpuMS}));
       require(error <= .003 && outliers === 0, 'CPU parity failed');
       readback.unmap(); readback.destroy();
     }
+    color.destroy(); if(output!==color) output.destroy(); if(sourceData) sourceData.destroy();
     // The next prepare releases the previous filter, so leave its shared blob
     // alive here. Three small fixtures are intentional for this harness.
   }
   require(errors.length === 0, 'WebGPU validation errors');
   module._oidnTestShutdown();
   for(const blob of blobs) module._oidnTestFree(blob);
-  log('PASS: one application device, two encoders before submit, no Asyncify');
+  device.destroy(); device=null;
+  }
+  log('PASS: one application device per transport, two encoders before submit, no Asyncify');
  } catch (error) { log('FAIL: ' + error.stack); }
+ finally { if(device) device.destroy(); document.querySelector('#run').disabled = false; }
 };
 </script>
