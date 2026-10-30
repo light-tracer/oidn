@@ -28,6 +28,11 @@ if(WIN32)
   set_target_properties(lt_webgpu PROPERTIES
     IMPORTED_LOCATION "${LT_ROOT}/libs/dawn/lib/Release/webgpu_dawn.dll"
     IMPORTED_IMPLIB "${LT_ROOT}/libs/dawn/lib/Release/webgpu_dawn.lib")
+  if(EXISTS "${LT_ROOT}/libs/dawn/include/windows/dawn/webgpu.h")
+    set_target_properties(lt_webgpu PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "${LT_ROOT}/libs/dawn/include/windows;${LT_ROOT}/libs/dawn/include"
+      INTERFACE_COMPILE_DEFINITIONS OIDN_WEBGPU_DAWN_MODERN)
+  endif()
 else()
   set_target_properties(lt_webgpu PROPERTIES
     IMPORTED_LOCATION "${LT_ROOT}/libs/dawn/lib/Release/libwebgpu_dawn${CMAKE_SHARED_LIBRARY_SUFFIX}")

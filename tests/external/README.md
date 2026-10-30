@@ -90,3 +90,8 @@ The RTX 3060 test host runs 610.88. The optional **test-only** environment varia
 toggle for diagnostic parity/profiling. It is not a library option, does not
 change Dawn's production guard, and must not be interpreted as supported-driver
 validation. With no override this host intentionally uses FP32.
+
+The updated LT Windows SDK can also be tested without a Dawn source checkout:
+set `LT_ROOT` to LT and leave `DAWN_ROOT` empty. The harness selects the matching
+modern headers from `libs/dawn/include/windows` automatically, together with
+LT's committed DLL/import library. Legacy SDKs retain their original ABI.
