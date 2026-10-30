@@ -41,7 +41,11 @@ including distinct C handles referring to the same JavaScript GPU object.
 It checks alpha and releases the
 application's texture handles immediately after import to exercise manager
 reference counts. It requests shader-f16 when available; the FP32 fallback is selected
-by the application's device feature list. No hidden blocking read or queue wait
+by the application's device feature list (uncheck Request shader-f16 to test it).
+Each transport group uses one application device across all three cases, then
+destroys that device to bound peak memory independently of browser GC of released
+GPU objects. A small-case-only switch is available for constrained machines.
+No hidden blocking read or queue wait
 is permitted in library code. Texture conversion buffers are GPU-only and are
 reused across frames; direct fusion with network I/O is a future optimization.
 The 1024x1024 case changes the memory budget from 512 to 64 MB between encoders
