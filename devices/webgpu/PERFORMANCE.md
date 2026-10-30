@@ -1,5 +1,46 @@
 # WebGPU backend - performance notes
 
+## Current upstream Dawn / FP16, 2026-10-30
+
+The new native provider uses upstream `08719d35a97` plus the minimal LT interop
+branch, tested at Dawn `c16b95c9981`, OIDN `68fac169`, LT `7cb0eb5be`.
+Unlike the earlier DLL, this Dawn has a versioned NVIDIA Vulkan guard: shader-f16
+requires driver **615.71 or newer**. The machine runs **610.88**. The measurements
+below explicitly use upstream's diagnostic `vulkan_enable_f16_on_nvidia` adapter
+toggle. Production defaults retain the guard and use FP32 on this driver.
+
+RTX 3060, two clean guides, same optimized kernels, median of seven warmed runs:
+
+| Resolution | FP32 GPU ms | FP16 GPU ms | GPU-time reduction |
+| --- | ---: | ---: | ---: |
+| 333×197 | 11.272 | 9.896 | 12.2% |
+| 512² | 35.783 | 32.309 | 9.7% |
+| 1024² | 138.936 | 128.778 | 7.3% |
+
+The range contains the complete GPU graph with per-convolution timestamp queries;
+upload, prepare and test readback are excluded. Tests/builds did not overlap
+these measurements. FP16 stores tensors/weights at half precision and accumulates
+in FP32; it does not use tensor-core/cooperative-matrix instructions. New Dawn
+alone does not produce a 2× improvement. The prior 36.96/141.49 ms FP32 numbers
+below are historical measurements, not a simultaneous DLL A/B test.
+
+Final external CTest passes 12/12. Maximum FP16 mean relative error versus CPU
+is 0.00045877 with no outliers. LT additionally passes RT switching, scene reload
+and shutdown plus both 8-assertion OIDN integration runs under Khronos Vulkan
+validation 1.4.366, with zero Dawn/Vulkan errors. Native LT PNGs at identical
+16-SPP inputs differ between FP32 and FP16 by at most one 8-bit level per channel.
+At 1024², the full LT diagnostic path measures 183.475 ms FP32 / 168.718 ms FP16;
+at 512² it is 83.283 / 83.468 ms. Frame scheduling/readback mask the smaller
+kernel improvement at that size.
+
+All GPU samples and float CPU parity are in
+[profiling-dawn-2026-10-30.json](profiling-dawn-2026-10-30.json).
+LT's `docs/DAWN_NATIVE_UPSTREAM.md` records build settings, RT fixes, image quality,
+whole-path latency and the production-driver prerequisite. This native update
+does not replace the browser's Dawn or LT's Emscripten provider; no new wasm-size
+measurement was made in this step.
+
+
 ## Shared Dawn investigation, 2026-10-30
 
 The native Light Tracer regression was caused by backend implementation details,

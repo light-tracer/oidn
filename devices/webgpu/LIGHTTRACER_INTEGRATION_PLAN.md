@@ -223,3 +223,14 @@ Fast, HDR экспорт, baking и режимы без guides не включа
 Дальнейший native FP16 требует проверки обновлённого общего Dawn/Vulkan LT:
 текущий pinned Dawn явно блокирует ShaderF16 на NVIDIA. Подробные замеры и
 ограничения: [PERFORMANCE.md](PERFORMANCE.md).
+
+
+### Нативный upstream Dawn и диагностический FP16
+
+Реализовано 30 октября: общий native Dawn обновлён до upstream `08719d35a97`
+с минимальными LT interop-патчами. RT, переключение HW/SW, замена сцены,
+shutdown и OIDN прошли Vulkan validation. FP16 сокращает GPU-время на 7–12%
+на RTX 3060, качество на проверенных входах сохранено. Production FP16 требует
+NVIDIA >=615.71; на установленном 610.88 замеры сделаны официальным диагностическим
+переключателем, а обычная конфигурация сохраняет FP32. Веб-provider не менялся.
+Подробности и raw samples: [PERFORMANCE.md](PERFORMANCE.md).
