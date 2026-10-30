@@ -20,9 +20,8 @@ document.querySelector('#run').onclick = async () => {
  let device;
  try {
   const cases = await (await fetch('regression-data/cases.json')).json();
-  // Bound this stress harness independently of browser GC of released GPU
-  // objects. Each transport uses one application device across all its cases.
-  for (const transport of ['buffer','texture','buffer-alias','texture-alias']) {
+  // Keep one application device across every resize/transport case. This
+  // catches accidental retention of intermediate staging/readback resources.
   const adapter = await navigator.gpu.requestAdapter({powerPreference:'high-performance'});
   const features = document.querySelector('#f16').checked && adapter.features.has('shader-f16') ? ['shader-f16'] : [];
   const timestamps=adapter.features.has('timestamp-query');
@@ -35,6 +34,7 @@ document.querySelector('#run').onclick = async () => {
   const module = await createOIDNTest({preinitializedWebGPUDevice:device, print:log, printErr:log});
   require(module._oidnTestInit(), 'init failed');
   const blobs=[];
+  for (const transport of ['buffer','texture','buffer-alias','texture-alias']) {
   for (const test of cases) {
     if(test.width>=1024 && !document.querySelector('#large').checked) continue;
     log('Starting ' + test.name + ' ' + transport + ' ' + (features.includes('shader-f16')?'f16':'f32'));
@@ -150,12 +150,12 @@ document.querySelector('#run').onclick = async () => {
     // The next prepare releases the previous filter, so leave its shared blob
     // alive here. Three small fixtures are intentional for this harness.
   }
+  }
   require(errors.length === 0, 'WebGPU validation errors');
   module._oidnTestShutdown();
   for(const blob of blobs) module._oidnTestFree(blob);
   device.destroy(); device=null;
-  }
-  log('PASS: one application device per transport, two encoders before submit, no Asyncify');
+  log('PASS: one application device for all cases, two encoders before submit, no Asyncify');
  } catch (error) { log('FAIL: ' + error.stack); }
  finally { if(device) device.destroy(); document.querySelector('#run').disabled = false; }
 };

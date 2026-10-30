@@ -51,3 +51,28 @@ reused across frames; direct fusion with network I/O is a future optimization.
 The 1024x1024 case changes the memory budget from 512 to 64 MB between encoders
 before either is submitted. Optional timestamp queries bracket only OIDN's GPU
 commands; warmup and GPU input restoration for in-place cases are excluded.
+
+## Native GPU profiler
+
+Configure a separate build with `-DOIDN_EXTERNAL_PROFILE=ON` in this parent
+project, then run:
+
+```powershell
+build-lt-profile/oidn_gpu_bench.exe D:/projects/oidn/weights/rt_ldr_calb_cnrm.tza 1024 1024 f32 0 -1 7
+```
+
+Arguments: model, width, height, dtype (`f32`/`f16`), kernel policy, memory budget
+MB (`-1` is LT's default), warmed repeat count. Policy 0 is optimized; 1 restores
+the prior direct/spatial kernels with fused pooling; 2 uses those kernels with
+separate pooling. All policies exclude the removed accidental staging copies.
+Use `rt_ldr.tza` for color-only or `rt_ldr_calb_cnrm.tza` for two clean guides.
+Synthetic inputs are uploaded before measurement. Run 0 is cold and excluded;
+RUN lines report GPU graph/convolution time separately from CPU encode, and OP
+lines report the last iteration's per-convolution timestamps. This is a speed
+harness; CTest and the browser/LT regressions check output correctness.
+
+The test-only instrumentation has no public API and is omitted from normal
+library/wasm builds. Timestamp-query support is required. For provider diagnosis,
+`OIDN_TEST_VULKAN`, `OIDN_TEST_D3D12`, and `OIDN_TEST_DXC` choose explicit adapter
+options; they do not override unsupported features. The pinned LT Dawn has an
+explicit NVIDIA Vulkan FP16 blacklist, documented in `devices/webgpu/PERFORMANCE.md`.

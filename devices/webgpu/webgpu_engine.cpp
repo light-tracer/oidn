@@ -320,6 +320,109 @@ OIDN_NAMESPACE_BEGIN
   }
   )wgsl";
 
+  // Implicit GEMM shares both input samples and weights across a matrix tile.
+  // Unlike spatial-only tiling, this also reuses inputs across 32 output channels.
+  static const char* kConv2dGemmWGSL = R"wgsl(
+  struct TensorF { data: array<$T$>, };
+  @group(0) @binding(0) var<storage, read_write> src   : TensorF;
+  @group(0) @binding(1) var<storage, read_write> weight: TensorF;
+  @group(0) @binding(2) var<storage, read_write> bias  : TensorF;
+  @group(0) @binding(3) var<storage, read_write> dst   : TensorF;
+
+  struct Params { ic: u32, ih: u32, iw: u32,
+                  oc: u32, oh: u32, ow: u32,
+                  kh: u32, kw: u32,
+                  padH: u32, padW: u32,
+                  activation: u32,
+                  biasMode: u32,
+                  postOp: u32,
+                  pad0: u32, pad1: u32, pad2: u32, };
+  @group(0) @binding(4) var<uniform> p: Params;
+
+  override IC: u32 = 9u;
+  override KH: u32 = 3u;
+  override KW: u32 = 3u;
+  // Implicit GEMM: 64 spatial positions x 32 output channels, K tiles of 16.
+  var<workgroup> aTile: array<$T$, 1024>;
+  var<workgroup> bTile: array<$T$, 512>;
+  @compute @workgroup_size(64,1,1)
+  fn main(@builtin(local_invocation_index) li:u32, @builtin(workgroup_id) wg:vec3<u32>) {
+    let lane = li % 8u;
+    let row = li / 8u;
+    let oc0 = wg.y * 32u + lane * 4u;
+    let spatialBase = (wg.x + wg.z * 65535u) * 64u;
+    let pixel0 = spatialBase + row;
+    let K = KH * KW * IC;
+    var acc0 = vec4<f32>(0.0);
+    var acc1 = vec4<f32>(0.0);
+    var acc2 = vec4<f32>(0.0);
+    var acc3 = vec4<f32>(0.0);
+    var acc4 = vec4<f32>(0.0);
+    var acc5 = vec4<f32>(0.0);
+    var acc6 = vec4<f32>(0.0);
+    var acc7 = vec4<f32>(0.0);
+
+    for (var base = 0u; base < K; base += 16u) {
+      for (var t = li; t < 1024u; t += 64u) {
+        let pixel = spatialBase + t / 16u;
+        let k = base + t % 16u;
+        let y = i32(pixel / p.iw) + i32(k / (KW*IC)) - i32(p.padH);
+        let x = i32(pixel % p.iw) + i32((k / IC) % KW) - i32(p.padW);
+        var v = $T$(0.0);
+        if (pixel < p.iw*p.ih && k < K && y>=0 && y<i32(p.ih) && x>=0 && x<i32(p.iw)) {
+          v = src.data[(u32(y)*p.iw+u32(x))*IC+k%IC];
+        }
+        aTile[t] = v;
+      }
+      for (var t=li; t<512u; t+=64u) {
+        let oc=wg.y*32u+t/16u;
+        let k=base+t%16u;
+        var v=$T$(0.0);
+        if(oc<p.oc && k<K) { v=weight.data[oc*K+k]; }
+        bTile[(t%16u)*32u+t/16u]=v;
+      }
+      workgroupBarrier();
+      for(var k=0u;k<16u;k++) {
+        let w=k*32u+lane*4u;
+        let v=vec4<f32>(f32(bTile[w]),f32(bTile[w+1u]),f32(bTile[w+2u]),f32(bTile[w+3u]));
+        acc0 += f32(aTile[row*16u+k])*v;
+        acc1 += f32(aTile[(row+8u)*16u+k])*v;
+        acc2 += f32(aTile[(row+16u)*16u+k])*v;
+        acc3 += f32(aTile[(row+24u)*16u+k])*v;
+        acc4 += f32(aTile[(row+32u)*16u+k])*v;
+        acc5 += f32(aTile[(row+40u)*16u+k])*v;
+        acc6 += f32(aTile[(row+48u)*16u+k])*v;
+        acc7 += f32(aTile[(row+56u)*16u+k])*v;
+
+      }
+      workgroupBarrier();
+    }
+    for(var r=0u;r<8u;r++) {
+      let pixel=pixel0+r*8u;
+      var accum=acc0;
+      if(r==1u) { accum=acc1; }
+      if(r==2u) { accum=acc2; }
+      if(r==3u) { accum=acc3; }
+      if(r==4u) { accum=acc4; }
+      if(r==5u) { accum=acc5; }
+      if(r==6u) { accum=acc6; }
+      if(r==7u) { accum=acc7; }
+
+      for(var c=0u;c<4u;c++) {
+        if(pixel<p.ow*p.oh && oc0+c<p.oc) {
+          let index=pixel*p.oc+oc0+c;
+          var v=accum[c];
+          if(p.biasMode==0u) { v+=f32(bias.data[oc0+c]); }
+          else if(p.biasMode==1u) { v+=f32(bias.data[index]); }
+          else { v+=f32(dst.data[index]); }
+          if(p.activation==1u) { v=max(v,0.0); }
+          dst.data[index]=$T$(v);
+        }
+      }
+    }
+  }
+  )wgsl";
+
   // The channel is the innermost dimension of HWC tensors, so threads iterate
   // channel-first (gid.x = ox*C + c) to keep loads/stores coalesced
   static const char* kPoolWGSL = R"wgsl(
@@ -392,6 +495,7 @@ OIDN_NAMESPACE_BEGIN
     for (int i = 0; i < 2; ++i)
     {
       if (convVec4Modules[i])  wgpuShaderModuleRelease(convVec4Modules[i]);
+      if (convGemmModules[i]) wgpuShaderModuleRelease(convGemmModules[i]);
       if (convTiledModules[i]) wgpuShaderModuleRelease(convTiledModules[i]);
     }
     if (addPipeline)        wgpuComputePipelineRelease(addPipeline);
@@ -443,7 +547,12 @@ OIDN_NAMESPACE_BEGIN
 
   bool WebGPUEngine::isConvSupported(Fusion fusion) const
   {
-    return fusion == Fusion::None || fusion == Fusion::PoolDst;
+#if defined(OIDN_WEBGPU_PROFILE)
+    if (profileConvMode == 1) return fusion == Fusion::None || fusion == Fusion::PoolDst;
+#endif
+    // A separate pool lets convolution use the tiled/GEMM kernels. The old
+    // fused path was limited to the much slower direct kernel.
+    return fusion == Fusion::None;
   }
 
   bool WebGPUEngine::isConcatConv2Supported(Fusion fusion) const
@@ -519,9 +628,9 @@ OIDN_NAMESPACE_BEGIN
      WGPUBufferBindingType_Storage, WGPUBufferBindingType_Storage,
      WGPUBufferBindingType_Uniform};
 
-  WGPUComputePipeline WebGPUEngine::getConvVariantPipeline(bool tiled, uint32_t ic4, uint32_t kh, uint32_t kw, bool f16)
+  WGPUComputePipeline WebGPUEngine::getConvVariantPipeline(uint32_t variant, uint32_t ic4, uint32_t kh, uint32_t kw, bool f16)
   {
-    const std::array<uint32_t, 5> key = {uint32_t(tiled), ic4, kh, kw, uint32_t(f16)};
+    const std::array<uint32_t, 5> key = {variant, ic4, kh, kw, uint32_t(f16)};
     auto it = convVariantPipelines.find(key);
     if (it != convVariantPipelines.end())
       return it->second;
@@ -530,10 +639,10 @@ OIDN_NAMESPACE_BEGIN
     const CachedPipeline& scalar =
       getPipeline(f16 ? "conv:f16" : "conv:f32", specializeWGSL(kConv2dWGSL, f16), kConvBindings);
 
-    WGPUShaderModule& module = tiled ? convTiledModules[f16] : convVec4Modules[f16];
+    WGPUShaderModule& module = variant == 2 ? convGemmModules[f16] : variant == 1 ? convTiledModules[f16] : convVec4Modules[f16];
     if (!module)
     {
-      const std::string code = specializeWGSL(tiled ? kConv2dTiledWGSL : kConv2dVec4WGSL, f16);
+      const std::string code = specializeWGSL(variant == 2 ? kConv2dGemmWGSL : variant == 1 ? kConv2dTiledWGSL : kConv2dVec4WGSL, f16);
       OIDNWGSLSource sourceV{};
       sourceV.chain.next = nullptr;
       oidnWGSLSource(sourceV, code.c_str());
@@ -545,7 +654,7 @@ OIDN_NAMESPACE_BEGIN
     }
 
     WGPUConstantEntry constants[3] = {};
-    constants[0].key = oidnWGPUEntryString("IC4"); constants[0].value = double(ic4);
+    constants[0].key = oidnWGPUEntryString(variant >= 2 ? "IC" : "IC4"); constants[0].value = double(ic4);
     constants[1].key = oidnWGPUEntryString("KH"); constants[1].value = double(kh);
     constants[2].key = oidnWGPUEntryString("KW"); constants[2].value = double(kw);
 
@@ -732,24 +841,6 @@ OIDN_NAMESPACE_BEGIN
     cpDesc.compute.constants = nullptr;
     cpDesc.label = {};
     softplusPipeline = wgpuDeviceCreateComputePipeline(device->device, &cpDesc);
-  }
-
-  WebGPUTensor WebGPUEngine::makeTensor(const float* data, WebGPUTensorType type,
-                                        uint32_t n, uint32_t c, uint32_t h, uint32_t w)
-  {
-    size_t count = size_t(n) * c * h * w;
-    size_t bytes = count * sizeof(float);
-    OIDNWGPUBufferUsage usage = WGPUBufferUsage_Storage;
-    if (type == WebGPUTensorType::Output)
-      usage |= WGPUBufferUsage_MapRead | WGPUBufferUsage_CopySrc;
-    else
-      usage |= WGPUBufferUsage_CopyDst;
-
-    WGPUBuffer buf = device->createBuffer(bytes, usage,
-                                          (type == WebGPUTensorType::Output) ? nullptr : data);
-    if (type == WebGPUTensorType::Output)
-      outputHosts[buf] = const_cast<float*>(data);
-    return {buf,0,n,c,h,w,type};
   }
 
   WebGPUTensor WebGPUEngine::makeTensor(const BufferRef& buffer, WebGPUTensorType type,
@@ -989,25 +1080,44 @@ OIDN_NAMESPACE_BEGIN
     const bool useVec4  = (src.c % 4 == 0);
     const bool useTiled = useVec4 && params.postOp == 0 && (src.c % 16 == 0) &&
                           weight.h <= 5 && weight.w <= 5;
+    // Keep the spatial kernel for narrow final outputs and tiny deep layers.
+    bool useGemm = params.postOp == 0 && dst.c >= 16 && size_t(dst.w)*dst.h >= 4096;
+#if defined(OIDN_WEBGPU_PROFILE)
+    if (profileConvMode != 0) useGemm = false;
+#endif
     WGPUComputePipeline convPipeline =
-      useVec4 ? getConvVariantPipeline(useTiled, src.c / 4, weight.h, weight.w, f16) : scalar.pipeline;
+      useGemm ? getConvVariantPipeline(2, src.c, weight.h, weight.w, f16) :
+      useVec4 ? getConvVariantPipeline(useTiled ? 1 : 0, src.c / 4, weight.h, weight.w, f16) : scalar.pipeline;
 
     WGPUCommandEncoder enc = getEncoder();
-    WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(enc, nullptr);
+    WGPUComputePassDescriptor passDesc{};
+#if defined(OIDN_WEBGPU_PROFILE)
+    WGPUComputePassTimestampWrites timestamps{};
+    if (profileQueries)
+    {
+      timestamps.querySet = profileQueries;
+      timestamps.beginningOfPassWriteIndex = 2 + uint32_t(profileLabels.size()) * 2;
+      timestamps.endOfPassWriteIndex = timestamps.beginningOfPassWriteIndex + 1;
+      if (timestamps.endOfPassWriteIndex >= 4096)
+        throw Exception(Error::InvalidOperation, "profiling query capacity exceeded");
+      passDesc.timestampWrites = &timestamps;
+      profileLabels.push_back(std::to_string(src.w) + "x" + std::to_string(src.h) +
+        "_" + std::to_string(src.c) + "to" + std::to_string(dst.c) +
+        (useGemm ? "_gemm" : useTiled ? "_tiled" : useVec4 ? "_vec4" : "_scalar") +
+        (params.postOp == 1 ? "_pool" : ""));
+    }
+#endif
+    WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(enc, &passDesc);
     wgpuComputePassEncoderSetPipeline(pass, convPipeline);
     wgpuComputePassEncoderSetBindGroup(pass, 0, bg, 0, nullptr);
-    wgpuComputePassEncoderDispatchWorkgroups(pass, (dst.w+7)/8, (dst.h+7)/8, (dst.c+3)/4);
+    if (useGemm)
+    {
+      const uint32_t tiles = (dst.w*dst.h+63)/64;
+      wgpuComputePassEncoderDispatchWorkgroups(pass, std::min(tiles, 65535u), (dst.c+31)/32, (tiles+65534)/65535);
+    }
+    else wgpuComputePassEncoderDispatchWorkgroups(pass, (dst.w+7)/8, (dst.h+7)/8, (dst.c+3)/4);
     wgpuComputePassEncoderEnd(pass);
     wgpuComputePassEncoderRelease(pass);
-
-    if (dst.type == WebGPUTensorType::Output)
-    {
-      size_t outBytes = size_t(dst.n)*dst.c*dst.h*dst.w*dst.elemByteSize;
-      WGPUBuffer readback = device->createBuffer(outBytes,
-                          WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
-      wgpuCommandEncoderCopyBufferToBuffer(enc, dst.buf, dst.offset, readback, 0, outBytes);
-      readbacks.push_back({dst.buf, readback, outputHosts[dst.buf], outBytes});
-    }
 
     wgpuBindGroupRelease(bg);
   }
@@ -1048,15 +1158,6 @@ OIDN_NAMESPACE_BEGIN
     wgpuComputePassEncoderEnd(pass);
     wgpuComputePassEncoderRelease(pass);
 
-    if (dst.type == WebGPUTensorType::Output)
-    {
-      size_t outBytes = size_t(dst.n)*dst.c*oh*ow*dst.elemByteSize;
-      WGPUBuffer readback = device->createBuffer(outBytes,
-                          WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
-      wgpuCommandEncoderCopyBufferToBuffer(enc, dst.buf, dst.offset, readback, 0, outBytes);
-      readbacks.push_back({dst.buf, readback, outputHosts[dst.buf], outBytes});
-    }
-
     wgpuBindGroupRelease(bg);
   }
 
@@ -1095,15 +1196,6 @@ OIDN_NAMESPACE_BEGIN
     wgpuComputePassEncoderDispatchWorkgroups(pass, (ow*src.c+255)/256, oh, 1);
     wgpuComputePassEncoderEnd(pass);
     wgpuComputePassEncoderRelease(pass);
-
-    if (dst.type == WebGPUTensorType::Output)
-    {
-      size_t outBytes = size_t(dst.n)*dst.c*oh*ow*dst.elemByteSize;
-      WGPUBuffer readback = device->createBuffer(outBytes,
-                          WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
-      wgpuCommandEncoderCopyBufferToBuffer(enc, dst.buf, dst.offset, readback, 0, outBytes);
-      readbacks.push_back({dst.buf, readback, outputHosts[dst.buf], outBytes});
-    }
 
     wgpuBindGroupRelease(bg);
   }
@@ -1144,13 +1236,6 @@ OIDN_NAMESPACE_BEGIN
     entries[2].binding = 2; entries[2].buffer = dst.buf; entries[2].offset = dst.offset; entries[2].size = size*sizeof(float);
     entries[3].binding = 3; entries[3].buffer = sizeSlot.buffer; entries[3].offset = sizeSlot.offset; entries[3].size = sizeof(uint32_t);
     dispatch1D(this, addPipeline, addBindGroupLayout, entries, 4, size);
-    if (dst.type == WebGPUTensorType::Output)
-    {
-      WGPUBuffer readback = device->createBuffer(size*sizeof(float),
-                          WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
-      wgpuCommandEncoderCopyBufferToBuffer(getEncoder(), dst.buf, dst.offset, readback, 0, size*sizeof(float));
-      readbacks.push_back({dst.buf, readback, outputHosts[dst.buf], size*sizeof(float)});
-    }
   }
 
   void WebGPUEngine::mul(const WebGPUTensor& A,
@@ -1166,13 +1251,6 @@ OIDN_NAMESPACE_BEGIN
     entries[2].binding = 2; entries[2].buffer = dst.buf; entries[2].offset = dst.offset; entries[2].size = size*sizeof(float);
     entries[3].binding = 3; entries[3].buffer = sizeSlot.buffer; entries[3].offset = sizeSlot.offset; entries[3].size = sizeof(uint32_t);
     dispatch1D(this, mulPipeline, mulBindGroupLayout, entries, 4, size);
-    if (dst.type == WebGPUTensorType::Output)
-    {
-      WGPUBuffer readback = device->createBuffer(size*sizeof(float),
-                          WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
-      wgpuCommandEncoderCopyBufferToBuffer(getEncoder(), dst.buf, dst.offset, readback, 0, size*sizeof(float));
-      readbacks.push_back({dst.buf, readback, outputHosts[dst.buf], size*sizeof(float)});
-    }
   }
 
   void WebGPUEngine::softplus(const WebGPUTensor& src,
@@ -1186,46 +1264,12 @@ OIDN_NAMESPACE_BEGIN
     entries[1].binding = 1; entries[1].buffer = dst.buf; entries[1].offset = dst.offset; entries[1].size = size*sizeof(float);
     entries[2].binding = 2; entries[2].buffer = sizeSlot.buffer; entries[2].offset = sizeSlot.offset; entries[2].size = sizeof(uint32_t);
     dispatch1D(this, softplusPipeline, softplusBindGroupLayout, entries, 3, size);
-    if (dst.type == WebGPUTensorType::Output)
-    {
-      WGPUBuffer readback = device->createBuffer(size*sizeof(float),
-                          WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
-      wgpuCommandEncoderCopyBufferToBuffer(getEncoder(), dst.buf, dst.offset, readback, 0, size*sizeof(float));
-      readbacks.push_back({dst.buf, readback, outputHosts[dst.buf], size*sizeof(float)});
-    }
   }
 
   void WebGPUEngine::sync()
   {
     flush();
     device->sync();
-  #if !defined(OIDN_WEBGPU_EXTERNAL_ONLY)
-    for (auto& rb : readbacks)
-    {
-      bool done = false;
-      auto callback = [](WGPUMapAsyncStatus status, WGPUStringView, void* userdata1, void*)
-      {
-        bool* d = static_cast<bool*>(userdata1);
-        *d = (status == WGPUMapAsyncStatus_Success);
-      };
-      WGPUBufferMapCallbackInfo cbInfo{};
-      cbInfo.callback = callback;
-      cbInfo.userdata1 = &done;
-    #if defined(__EMSCRIPTEN__)
-      cbInfo.mode = WGPUCallbackMode_WaitAnyOnly;
-      device->waitFuture(wgpuBufferMapAsync(rb.readback, WGPUMapMode_Read, 0, rb.size, cbInfo));
-    #else
-      cbInfo.mode = WGPUCallbackMode_AllowProcessEvents;
-      wgpuBufferMapAsync(rb.readback, WGPUMapMode_Read, 0, rb.size, cbInfo);
-      while (!done)
-        device->sync();
-    #endif
-      std::memcpy(rb.host, wgpuBufferGetConstMappedRange(rb.readback,0,rb.size), rb.size);
-      wgpuBufferUnmap(rb.readback);
-      wgpuBufferRelease(rb.readback);
-    }
-    readbacks.clear();
-  #endif
   }
 
 OIDN_NAMESPACE_END

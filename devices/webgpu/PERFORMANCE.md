@@ -1,5 +1,105 @@
 # WebGPU backend â€” performance notes
 
+## Shared Dawn investigation, 2026-10-30
+
+The native Light Tracer regression was caused by backend implementation details,
+not by the public shared-device API. Three findings are now confirmed:
+
+1. **Unintended readback staging after every tensor operation.** `conv2d`, pool,
+   upsample and elementwise operations treated every `Output` tensor as a host
+   output. They allocated MapRead buffers and recorded copies even when no host
+   destination had been registered. External encoding never called the old
+   blocking `sync()` consumer, so these buffers accumulated. This was also the
+   cause of the browser sweep exhausting memory; the earlier attribution to
+   browser GC was incomplete. The unused raw-host tensor helper and the entire
+   implicit readback queue have been removed. Explicit public buffer reads still
+   work; viewport tensors remain on the GPU.
+2. **Inefficient direct convolution, especially with 3/6/9 channels and fused
+   pooling.** Fused pool selected the direct kernel and prevented shared-memory
+   tiling. The new implicit GEMM kernel cooperatively loads input and weight tiles
+   (64 spatial positions × 32 output channels, reduction chunks of 16), reuses
+   them in workgroup memory, and accumulates in FP32. It reads OHWI weights
+   directly; no im2col buffer or new weight format is needed. Pooling is separate.
+   Tiny deep layers and narrow final outputs retain the spatial/direct fallback.
+3. **Native FP16 is unavailable in the supplied Dawn.** The actual adapter is
+   Vulkan, not D3D12. An explicit D3D12 request to the shipped DLL returns no
+   supported adapter. At LT's pinned Dawn revision the Vulkan feature check
+   explicitly disables `ShaderF16` for NVIDIA because of CTS crashes:
+   [PhysicalDeviceVk.cpp, lines 234–244](https://github.com/google/dawn/blob/fccbcdae2ba4d3986c82310a1bb374d41ad07495/src/dawn/native/vulkan/PhysicalDeviceVk.cpp#L234-L244).
+   Adding DXC or requesting the optional feature does not remove this guard.
+   No driver workaround or safety toggle was bypassed.
+
+### GPU measurements
+
+RTX 3060, supplied LT Dawn/Vulkan, FP32, Release, sRGB and two clean guides,
+`rt_ldr_calb_cnrm.tza`. Synthetic image data; all cases below are one tile.
+Median of warmed iterations, excluding run 0, in milliseconds:
+
+| Configuration | 512² GPU | CPU record | 1024² GPU |
+| --- | ---: | ---: | ---: |
+| Initial port, including accidental staging | 120.00 | 25.11 | not measured |
+| Remove staging, original convolution policy | 94.37 | 0.50 | 413.66 |
+| Also split pooling, original convolution kernels | 73.66 | 0.33 | not measured |
+| New implicit GEMM + separate pool | **36.96** | **0.27** | **141.49** |
+
+The first 512² ablations use a 512 MB budget; final runs and 1024² use LT's
+unlimited default (`maxMemoryMB=-1`). There is no tiling difference at 512².
+At an explicit 512 MB budget, FP32 1024² splits into two overlapping 768×1024
+network tiles; do not compare that run with unlimited-budget timings.
+
+GPU timestamps bracket the encoded graph, without uploads, pipeline compilation,
+query readback, or LT frame scheduling. Convolution passes are separately timed;
+these account for nearly all remaining GPU work. Query quantization is 65.536 µs
+on this adapter, so small per-pass values are not precise. The profiler is built
+only with the external test option; production and wasm contain no query code.
+Full samples and final per-layer timings: [profiling-2026-10-30.json](profiling-2026-10-30.json).
+
+The tested small-channel spatial kernel and literal loop specialization were
+slower than the selected GEMM path and were not retained. GEMM spatial tiles of
+16/32/64 were measured; 64 was fastest overall on this adapter. There is no
+cross-vendor auto-tuning claim. FP16 is storage precision; accumulation stays FP32
+and this kernel does not use CUDA or vendor tensor-core instructions.
+
+### Actual Light Tracer and browser validation
+
+Same LT scene and test as the earlier CUDA comparison, median of five warmed
+repeats, including the common diagnostic readback and frame scheduling:
+
+| Size | Initial WebGPU | Optimized WebGPU | Historical CUDA reference |
+| --- | ---: | ---: | ---: |
+| 333×197 | 83.31 ms | **66.21 ms** | 133.29 ms |
+| 512² | 166.65 ms | **83.30 ms** | 133.25 ms |
+| 1024² | 663.01 ms | **180.74 ms** | 150.07 ms |
+
+Thus the 1024² LT path is 3.67× faster than the initial integration, with a
+remaining ~20% latency gap to the historical CUDA measurement. This is a
+WebGPU-only integration direction; CUDA is retained only as a benchmark reference.
+No promise of parity on all scenes, sizes or GPUs follows from this one test.
+
+Input and 1024 SPP reference PNGs match the CUDA run bit-for-bit. Optimized
+output differs from CUDA by at most 1/255 per RGB channel, PSNR 65.8–66.2 dB.
+All six native external CTests, the LT 8-assertion integration regression, and
+its 3-assertion native comparison pass. The library's CPU comparisons use float
+outputs, while the LT visual comparison uses 8-bit PNGs.
+
+Browser FP16 and FP32 each pass all 24 CPU comparisons (odd sRGB/HDR, tiled HDR,
+buffer/texture, duplicate handles and in-place), now on **one application device
+for the entire sweep**, including repeated filter resizing. No OOM occurred.
+This is a finite regression series, not a multi-hour memory soak. FP16 relative
+mean error is 0.000283–0.000459, FP32 3.59e-7–5.43e-7, with zero outliers.
+FP16 color-only texture timestamps changed from ~21 to ~9–10 ms at 333×197,
+and from ~302 to ~121 ms at 1024² / 512 MB; the forced 64 MB tiled case takes
+~282 ms instead of ~687 ms. Browser figures are individual harness observations,
+not LT end-to-end medians.
+
+### Remaining work
+
+The next performance work is further GEMM reuse/vectorization, reducing the
+separate upsample/concat work, and validating an updated **shared LT Dawn Vulkan**
+with native NVIDIA FP16 support. Do not remove the old Dawn guard without its
+upstream fix or switch LT's native graphics backend just to enable FP16. The
+current improvements already work with the shipped Dawn and both browser dtypes.
+
 ## Correctness update, 2026-10-29
 
 The port now targets upstream OIDN 2.5.1 (`6602ee2c`). Device flush/wait submits

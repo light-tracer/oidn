@@ -1,0 +1,866 @@
+{
+  "date": "2026-10-30",
+  "gpu": "RTX 3060",
+  "provider": "LT Dawn fccbcdae2ba4d3986c82310a1bb374d41ad07495 / Vulkan",
+  "dtype": "f32",
+  "inputs": "synthetic sRGB color + clean albedo + normal; rt_ldr_calb_cnrm.tza",
+  "scope": "GPU timestamps including graph, excluding input upload, prepare, test timestamp readback; per-convolution timestamp queries enabled",
+  "cases": {
+    "baseline-512": {
+      "samples": [
+        {
+          "index": 0,
+          "gpu_ms": 124.649472,
+          "conv_ms": 102.039552,
+          "cpu_ms": 665.1526,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 1,
+          "gpu_ms": 119.996416,
+          "conv_ms": 98.762752,
+          "cpu_ms": 21.4498,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 2,
+          "gpu_ms": 120.58624,
+          "conv_ms": 99.549184,
+          "cpu_ms": 20.8874,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 3,
+          "gpu_ms": 118.489088,
+          "conv_ms": 97.583104,
+          "cpu_ms": 25.107,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 4,
+          "gpu_ms": 119.078912,
+          "conv_ms": 100.27008,
+          "cpu_ms": 25.3187,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 5,
+          "gpu_ms": 132.644864,
+          "conv_ms": 99.876864,
+          "cpu_ms": 32.3228,
+          "conv_dispatches": 20
+        }
+      ],
+      "last_sample_ops": [
+        {
+          "shape": "512x512_9to32_scalar",
+          "gpu_ms": 10.551296
+        },
+        {
+          "shape": "512x512_32to32_vec4_pool",
+          "gpu_ms": 21.561344
+        },
+        {
+          "shape": "256x256_32to48_vec4_pool",
+          "gpu_ms": 6.356992
+        },
+        {
+          "shape": "128x128_48to64_vec4_pool",
+          "gpu_ms": 1.376256
+        },
+        {
+          "shape": "64x64_64to80_vec4_pool",
+          "gpu_ms": 0.524288
+        },
+        {
+          "shape": "32x32_80to96_tiled",
+          "gpu_ms": 0.131072
+        },
+        {
+          "shape": "32x32_96to96_tiled",
+          "gpu_ms": 0.131072
+        },
+        {
+          "shape": "64x64_96to112_tiled",
+          "gpu_ms": 0.589824
+        },
+        {
+          "shape": "64x64_64to112_tiled",
+          "gpu_ms": 0.393216
+        },
+        {
+          "shape": "64x64_112to112_tiled",
+          "gpu_ms": 0.65536
+        },
+        {
+          "shape": "128x128_112to96_tiled",
+          "gpu_ms": 2.097152
+        },
+        {
+          "shape": "128x128_48to96_tiled",
+          "gpu_ms": 0.98304
+        },
+        {
+          "shape": "128x128_96to96_tiled",
+          "gpu_ms": 2.490368
+        },
+        {
+          "shape": "256x256_96to64_tiled",
+          "gpu_ms": 5.177344
+        },
+        {
+          "shape": "256x256_32to64_tiled",
+          "gpu_ms": 1.769472
+        },
+        {
+          "shape": "256x256_64to64_tiled",
+          "gpu_ms": 3.211264
+        },
+        {
+          "shape": "512x512_64to64_tiled",
+          "gpu_ms": 13.500416
+        },
+        {
+          "shape": "512x512_9to64_scalar",
+          "gpu_ms": 21.495808
+        },
+        {
+          "shape": "512x512_64to32_tiled",
+          "gpu_ms": 6.488064
+        },
+        {
+          "shape": "512x512_32to3_tiled",
+          "gpu_ms": 0.393216
+        }
+      ],
+      "median_gpu_ms": 119.996416,
+      "median_cpu_ms": 25.107,
+      "note": "Original kernels and accidental staging copies, instrumented 45c62713; budget 512 MB, one tile. First exploratory untiled run is not used."
+    },
+    "no-readback-512": {
+      "samples": [
+        {
+          "index": 0,
+          "gpu_ms": 97.845248,
+          "conv_ms": 96.534528,
+          "cpu_ms": 53.5703,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 1,
+          "gpu_ms": 96.01024,
+          "conv_ms": 95.35488,
+          "cpu_ms": 1.6019,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 2,
+          "gpu_ms": 97.255424,
+          "conv_ms": 96.468992,
+          "cpu_ms": 0.4992,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 3,
+          "gpu_ms": 94.175232,
+          "conv_ms": 93.454336,
+          "cpu_ms": 0.6079,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 4,
+          "gpu_ms": 94.37184,
+          "conv_ms": 93.519872,
+          "cpu_ms": 0.2544,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 5,
+          "gpu_ms": 97.845248,
+          "conv_ms": 97.058816,
+          "cpu_ms": 0.3244,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 6,
+          "gpu_ms": 94.175232,
+          "conv_ms": 93.3888,
+          "cpu_ms": 0.422,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 7,
+          "gpu_ms": 94.175232,
+          "conv_ms": 93.454336,
+          "cpu_ms": 1.2551,
+          "conv_dispatches": 20
+        }
+      ],
+      "last_sample_ops": [
+        {
+          "shape": "512x512_9to32_scalar",
+          "gpu_ms": 9.895936
+        },
+        {
+          "shape": "512x512_32to32_vec4_pool",
+          "gpu_ms": 19.33312
+        },
+        {
+          "shape": "256x256_32to48_vec4_pool",
+          "gpu_ms": 5.636096
+        },
+        {
+          "shape": "128x128_48to64_vec4_pool",
+          "gpu_ms": 1.31072
+        },
+        {
+          "shape": "64x64_64to80_vec4_pool",
+          "gpu_ms": 0.458752
+        },
+        {
+          "shape": "32x32_80to96_tiled",
+          "gpu_ms": 0.131072
+        },
+        {
+          "shape": "32x32_96to96_tiled",
+          "gpu_ms": 0.131072
+        },
+        {
+          "shape": "64x64_96to112_tiled",
+          "gpu_ms": 0.589824
+        },
+        {
+          "shape": "64x64_64to112_tiled",
+          "gpu_ms": 0.32768
+        },
+        {
+          "shape": "64x64_112to112_tiled",
+          "gpu_ms": 0.65536
+        },
+        {
+          "shape": "128x128_112to96_tiled",
+          "gpu_ms": 2.031616
+        },
+        {
+          "shape": "128x128_48to96_tiled",
+          "gpu_ms": 0.98304
+        },
+        {
+          "shape": "128x128_96to96_tiled",
+          "gpu_ms": 1.835008
+        },
+        {
+          "shape": "256x256_96to64_tiled",
+          "gpu_ms": 4.784128
+        },
+        {
+          "shape": "256x256_32to64_tiled",
+          "gpu_ms": 1.835008
+        },
+        {
+          "shape": "256x256_64to64_tiled",
+          "gpu_ms": 3.211264
+        },
+        {
+          "shape": "512x512_64to64_tiled",
+          "gpu_ms": 13.1072
+        },
+        {
+          "shape": "512x512_9to64_scalar",
+          "gpu_ms": 20.054016
+        },
+        {
+          "shape": "512x512_64to32_tiled",
+          "gpu_ms": 6.750208
+        },
+        {
+          "shape": "512x512_32to3_tiled",
+          "gpu_ms": 0.393216
+        }
+      ],
+      "median_gpu_ms": 94.37184,
+      "median_cpu_ms": 0.4992,
+      "note": "Same one-tile 512 MB configuration after removing staging; unfused variant splits pooling."
+    },
+    "no-readback-unfused-512": {
+      "samples": [
+        {
+          "index": 0,
+          "gpu_ms": 77.266944,
+          "conv_ms": 76.02176,
+          "cpu_ms": 44.3116,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 1,
+          "gpu_ms": 75.628544,
+          "conv_ms": 74.05568,
+          "cpu_ms": 0.2899,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 2,
+          "gpu_ms": 73.007104,
+          "conv_ms": 71.958528,
+          "cpu_ms": 0.3032,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 3,
+          "gpu_ms": 73.793536,
+          "conv_ms": 72.74496,
+          "cpu_ms": 0.272,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 4,
+          "gpu_ms": 73.596928,
+          "conv_ms": 72.679424,
+          "cpu_ms": 0.3303,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 5,
+          "gpu_ms": 73.596928,
+          "conv_ms": 72.613888,
+          "cpu_ms": 0.693,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 6,
+          "gpu_ms": 76.873728,
+          "conv_ms": 75.890688,
+          "cpu_ms": 1.6894,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 7,
+          "gpu_ms": 73.662464,
+          "conv_ms": 72.74496,
+          "cpu_ms": 0.9253,
+          "conv_dispatches": 20
+        }
+      ],
+      "last_sample_ops": [
+        {
+          "shape": "512x512_9to32_scalar",
+          "gpu_ms": 9.895936
+        },
+        {
+          "shape": "512x512_32to32_tiled",
+          "gpu_ms": 3.342336
+        },
+        {
+          "shape": "256x256_32to48_tiled",
+          "gpu_ms": 1.245184
+        },
+        {
+          "shape": "128x128_48to64_tiled",
+          "gpu_ms": 0.589824
+        },
+        {
+          "shape": "64x64_64to80_tiled",
+          "gpu_ms": 0.262144
+        },
+        {
+          "shape": "32x32_80to96_tiled",
+          "gpu_ms": 0.131072
+        },
+        {
+          "shape": "32x32_96to96_tiled",
+          "gpu_ms": 0.131072
+        },
+        {
+          "shape": "64x64_96to112_tiled",
+          "gpu_ms": 0.524288
+        },
+        {
+          "shape": "64x64_64to112_tiled",
+          "gpu_ms": 0.393216
+        },
+        {
+          "shape": "64x64_112to112_tiled",
+          "gpu_ms": 0.65536
+        },
+        {
+          "shape": "128x128_112to96_tiled",
+          "gpu_ms": 2.097152
+        },
+        {
+          "shape": "128x128_48to96_tiled",
+          "gpu_ms": 0.98304
+        },
+        {
+          "shape": "128x128_96to96_tiled",
+          "gpu_ms": 1.835008
+        },
+        {
+          "shape": "256x256_96to64_tiled",
+          "gpu_ms": 4.849664
+        },
+        {
+          "shape": "256x256_32to64_tiled",
+          "gpu_ms": 2.031616
+        },
+        {
+          "shape": "256x256_64to64_tiled",
+          "gpu_ms": 3.2768
+        },
+        {
+          "shape": "512x512_64to64_tiled",
+          "gpu_ms": 12.976128
+        },
+        {
+          "shape": "512x512_9to64_scalar",
+          "gpu_ms": 20.709376
+        },
+        {
+          "shape": "512x512_64to32_tiled",
+          "gpu_ms": 6.488064
+        },
+        {
+          "shape": "512x512_32to3_tiled",
+          "gpu_ms": 0.32768
+        }
+      ],
+      "median_gpu_ms": 73.662464,
+      "median_cpu_ms": 0.3303,
+      "note": "Same one-tile 512 MB configuration after removing staging; unfused variant splits pooling."
+    },
+    "final-512": {
+      "samples": [
+        {
+          "index": 0,
+          "gpu_ms": 38.404096,
+          "conv_ms": 37.02784,
+          "cpu_ms": 202.7078,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 1,
+          "gpu_ms": 38.404096,
+          "conv_ms": 37.486592,
+          "cpu_ms": 0.2722,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 2,
+          "gpu_ms": 36.831232,
+          "conv_ms": 35.979264,
+          "cpu_ms": 0.2724,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 3,
+          "gpu_ms": 36.962304,
+          "conv_ms": 35.979264,
+          "cpu_ms": 0.2637,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 4,
+          "gpu_ms": 36.962304,
+          "conv_ms": 36.110336,
+          "cpu_ms": 0.274,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 5,
+          "gpu_ms": 36.896768,
+          "conv_ms": 36.0448,
+          "cpu_ms": 0.2601,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 6,
+          "gpu_ms": 36.962304,
+          "conv_ms": 35.848192,
+          "cpu_ms": 0.266,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 7,
+          "gpu_ms": 35.782656,
+          "conv_ms": 34.996224,
+          "cpu_ms": 0.2586,
+          "conv_dispatches": 20
+        }
+      ],
+      "last_sample_ops": [
+        {
+          "shape": "512x512_9to32_gemm",
+          "gpu_ms": 0.851968
+        },
+        {
+          "shape": "512x512_32to32_gemm",
+          "gpu_ms": 2.424832
+        },
+        {
+          "shape": "256x256_32to48_gemm",
+          "gpu_ms": 1.179648
+        },
+        {
+          "shape": "128x128_48to64_gemm",
+          "gpu_ms": 0.589824
+        },
+        {
+          "shape": "64x64_64to80_gemm",
+          "gpu_ms": 0.32768
+        },
+        {
+          "shape": "32x32_80to96_tiled",
+          "gpu_ms": 0.131072
+        },
+        {
+          "shape": "32x32_96to96_tiled",
+          "gpu_ms": 0.131072
+        },
+        {
+          "shape": "64x64_96to112_gemm",
+          "gpu_ms": 0.524288
+        },
+        {
+          "shape": "64x64_64to112_gemm",
+          "gpu_ms": 0.32768
+        },
+        {
+          "shape": "64x64_112to112_gemm",
+          "gpu_ms": 0.589824
+        },
+        {
+          "shape": "128x128_112to96_gemm",
+          "gpu_ms": 1.6384
+        },
+        {
+          "shape": "128x128_48to96_gemm",
+          "gpu_ms": 0.720896
+        },
+        {
+          "shape": "128x128_96to96_gemm",
+          "gpu_ms": 1.6384
+        },
+        {
+          "shape": "256x256_96to64_gemm",
+          "gpu_ms": 3.670016
+        },
+        {
+          "shape": "256x256_32to64_gemm",
+          "gpu_ms": 1.179648
+        },
+        {
+          "shape": "256x256_64to64_gemm",
+          "gpu_ms": 2.490368
+        },
+        {
+          "shape": "512x512_64to64_gemm",
+          "gpu_ms": 9.764864
+        },
+        {
+          "shape": "512x512_9to64_gemm",
+          "gpu_ms": 1.572864
+        },
+        {
+          "shape": "512x512_64to32_gemm",
+          "gpu_ms": 4.849664
+        },
+        {
+          "shape": "512x512_32to3_tiled",
+          "gpu_ms": 0.393216
+        }
+      ],
+      "median_gpu_ms": 36.962304,
+      "median_cpu_ms": 0.266,
+      "note": "maxMemoryMB=-1 (LT default); one tile; final uses implicit GEMM and separate pooling; old-kernels restores prior kernel policy only."
+    },
+    "final-1024": {
+      "samples": [
+        {
+          "index": 0,
+          "gpu_ms": 142.671872,
+          "conv_ms": 137.560064,
+          "cpu_ms": 84.2122,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 1,
+          "gpu_ms": 139.395072,
+          "conv_ms": 135.790592,
+          "cpu_ms": 0.5282,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 2,
+          "gpu_ms": 141.492224,
+          "conv_ms": 137.756672,
+          "cpu_ms": 0.2687,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 3,
+          "gpu_ms": 139.526144,
+          "conv_ms": 135.790592,
+          "cpu_ms": 0.2698,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 4,
+          "gpu_ms": 141.099008,
+          "conv_ms": 137.6256,
+          "cpu_ms": 0.2668,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 5,
+          "gpu_ms": 142.86848,
+          "conv_ms": 139.329536,
+          "cpu_ms": 0.2725,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 6,
+          "gpu_ms": 142.475264,
+          "conv_ms": 138.93632,
+          "cpu_ms": 0.2804,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 7,
+          "gpu_ms": 142.934016,
+          "conv_ms": 139.460608,
+          "cpu_ms": 0.2962,
+          "conv_dispatches": 20
+        }
+      ],
+      "last_sample_ops": [
+        {
+          "shape": "1024x1024_9to32_gemm",
+          "gpu_ms": 3.145728
+        },
+        {
+          "shape": "1024x1024_32to32_gemm",
+          "gpu_ms": 9.895936
+        },
+        {
+          "shape": "512x512_32to48_gemm",
+          "gpu_ms": 4.58752
+        },
+        {
+          "shape": "256x256_48to64_gemm",
+          "gpu_ms": 1.900544
+        },
+        {
+          "shape": "128x128_64to80_gemm",
+          "gpu_ms": 0.917504
+        },
+        {
+          "shape": "64x64_80to96_gemm",
+          "gpu_ms": 0.393216
+        },
+        {
+          "shape": "64x64_96to96_gemm",
+          "gpu_ms": 0.458752
+        },
+        {
+          "shape": "128x128_96to112_gemm",
+          "gpu_ms": 2.555904
+        },
+        {
+          "shape": "128x128_64to112_gemm",
+          "gpu_ms": 1.245184
+        },
+        {
+          "shape": "128x128_112to112_gemm",
+          "gpu_ms": 2.162688
+        },
+        {
+          "shape": "256x256_112to96_gemm",
+          "gpu_ms": 6.291456
+        },
+        {
+          "shape": "256x256_48to96_gemm",
+          "gpu_ms": 2.752512
+        },
+        {
+          "shape": "256x256_96to96_gemm",
+          "gpu_ms": 5.373952
+        },
+        {
+          "shape": "512x512_96to64_gemm",
+          "gpu_ms": 14.7456
+        },
+        {
+          "shape": "512x512_32to64_gemm",
+          "gpu_ms": 5.439488
+        },
+        {
+          "shape": "512x512_64to64_gemm",
+          "gpu_ms": 10.15808
+        },
+        {
+          "shape": "1024x1024_64to64_gemm",
+          "gpu_ms": 40.501248
+        },
+        {
+          "shape": "1024x1024_9to64_gemm",
+          "gpu_ms": 6.488064
+        },
+        {
+          "shape": "1024x1024_64to32_gemm",
+          "gpu_ms": 18.939904
+        },
+        {
+          "shape": "1024x1024_32to3_tiled",
+          "gpu_ms": 1.507328
+        }
+      ],
+      "median_gpu_ms": 141.492224,
+      "median_cpu_ms": 0.2725,
+      "note": "maxMemoryMB=-1 (LT default); one tile; final uses implicit GEMM and separate pooling; old-kernels restores prior kernel policy only."
+    },
+    "old-kernels-1024": {
+      "samples": [
+        {
+          "index": 0,
+          "gpu_ms": 415.956992,
+          "conv_ms": 411.56608,
+          "cpu_ms": 51.2061,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 1,
+          "gpu_ms": 412.483584,
+          "conv_ms": 409.731072,
+          "cpu_ms": 0.9947,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 2,
+          "gpu_ms": 413.663232,
+          "conv_ms": 410.386432,
+          "cpu_ms": 0.2458,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 3,
+          "gpu_ms": 414.5152,
+          "conv_ms": 411.828224,
+          "cpu_ms": 1.1214,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 4,
+          "gpu_ms": 414.711808,
+          "conv_ms": 411.89376,
+          "cpu_ms": 3.2151,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 5,
+          "gpu_ms": 411.56608,
+          "conv_ms": 408.813568,
+          "cpu_ms": 2.1682,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 6,
+          "gpu_ms": 417.398784,
+          "conv_ms": 414.253056,
+          "cpu_ms": 0.2593,
+          "conv_dispatches": 20
+        },
+        {
+          "index": 7,
+          "gpu_ms": 413.53216,
+          "conv_ms": 410.779648,
+          "cpu_ms": 3.4843,
+          "conv_dispatches": 20
+        }
+      ],
+      "last_sample_ops": [
+        {
+          "shape": "1024x1024_9to32_scalar",
+          "gpu_ms": 42.532864
+        },
+        {
+          "shape": "1024x1024_32to32_vec4_pool",
+          "gpu_ms": 78.708736
+        },
+        {
+          "shape": "512x512_32to48_vec4_pool",
+          "gpu_ms": 30.015488
+        },
+        {
+          "shape": "256x256_48to64_vec4_pool",
+          "gpu_ms": 17.36704
+        },
+        {
+          "shape": "128x128_64to80_vec4_pool",
+          "gpu_ms": 2.097152
+        },
+        {
+          "shape": "64x64_80to96_tiled",
+          "gpu_ms": 0.393216
+        },
+        {
+          "shape": "64x64_96to96_tiled",
+          "gpu_ms": 0.458752
+        },
+        {
+          "shape": "128x128_96to112_tiled",
+          "gpu_ms": 2.097152
+        },
+        {
+          "shape": "128x128_64to112_tiled",
+          "gpu_ms": 1.441792
+        },
+        {
+          "shape": "128x128_112to112_tiled",
+          "gpu_ms": 2.424832
+        },
+        {
+          "shape": "256x256_112to96_tiled",
+          "gpu_ms": 8.912896
+        },
+        {
+          "shape": "256x256_48to96_tiled",
+          "gpu_ms": 4.128768
+        },
+        {
+          "shape": "256x256_96to96_tiled",
+          "gpu_ms": 7.20896
+        },
+        {
+          "shape": "512x512_96to64_tiled",
+          "gpu_ms": 20.119552
+        },
+        {
+          "shape": "512x512_32to64_tiled",
+          "gpu_ms": 7.602176
+        },
+        {
+          "shape": "512x512_64to64_tiled",
+          "gpu_ms": 12.976128
+        },
+        {
+          "shape": "1024x1024_64to64_tiled",
+          "gpu_ms": 56.295424
+        },
+        {
+          "shape": "1024x1024_9to64_scalar",
+          "gpu_ms": 88.276992
+        },
+        {
+          "shape": "1024x1024_64to32_tiled",
+          "gpu_ms": 26.279936
+        },
+        {
+          "shape": "1024x1024_32to3_tiled",
+          "gpu_ms": 1.441792
+        }
+      ],
+      "median_gpu_ms": 413.663232,
+      "median_cpu_ms": 1.1214,
+      "note": "maxMemoryMB=-1 (LT default); one tile; final uses implicit GEMM and separate pooling; old-kernels restores prior kernel policy only."
+    }
+  }
+}

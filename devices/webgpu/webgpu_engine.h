@@ -42,10 +42,8 @@ OIDN_NAMESPACE_BEGIN
     Ref<Buffer> newBuffer(void* ptr, size_t byteSize) override;
     Ref<Buffer> newBuffer(const Ref<Arena>& arena, size_t byteSize, size_t byteOffset) override;
 
-    // The conv kernel implements fused 2x2 max pooling (same total conv work,
-    // but skips the intermediate full-resolution tensor and the pool
-    // dispatch). UpsampleSrc0 remains a separate operation: upstream fusion
-    // upsamples the input before convolution, rather than the convolution output.
+    // Prefer separate pooling/upsampling so convolution can use shared-memory
+    // kernels. Direct fused pooling remains available to low-level kernel tests.
     bool isConvSupported(Fusion fusion) const override;
     bool isConcatConv2Supported(Fusion fusion) const override;
     Ref<ConcatConv2> newConcatConv2(const ConcatConvDesc& desc) override;
@@ -63,8 +61,6 @@ OIDN_NAMESPACE_BEGIN
 
     // Convenience helpers for creating lightweight tensor views used by the
     // custom WebGPU kernels. These are not overrides of Engine::newTensor().
-    WebGPUTensor makeTensor(const float* data, WebGPUTensorType type,
-                            uint32_t n, uint32_t c, uint32_t h, uint32_t w);
     WebGPUTensor makeTensor(const BufferRef& buffer, WebGPUTensorType type,
                             uint32_t n, uint32_t c, uint32_t h, uint32_t w);
 
@@ -124,6 +120,13 @@ OIDN_NAMESPACE_BEGIN
     void accessTexture(WebGPUTextureBuffer* texture, bool write);
     bool isExternalEncoding() const { return externalEncoder != nullptr; }
 
+#if defined(OIDN_WEBGPU_PROFILE)
+    // Test-only GPU timestamps; caller owns the query set and resolves it after encode.
+    WGPUQuerySet profileQueries = nullptr;
+    std::vector<std::string> profileLabels;
+    int profileConvMode = 0; // 0=optimized, 1=old kernels+fused pool, 2=old kernels+separate pool
+#endif
+
     // Cached compute pipeline for ops with (possibly specialized) WGSL
     // sources. bindingTypes describes the buffer bindings in order.
     struct CachedPipeline
@@ -150,15 +153,16 @@ OIDN_NAMESPACE_BEGIN
 
     WebGPUDevice* device;
 
-    // Specialized conv variants: vec4 (input channels multiple of 4) and
-    // workgroup-tiled (plain convs with input channels multiple of 16).
+    // Convolution variants: 0=vec4, 1=spatial tile, 2=implicit GEMM.
+    // The channel constant is IC4 for variants 0/1 and IC for variant 2.
     // Pipelines are specialized per (variant, IC4, KH, KW, dtype) via override
     // constants so the loops have compile-time trip counts (crucial for
     // Tint/FXC in browsers).
+    WGPUShaderModule convGemmModules[2] = {nullptr, nullptr};
     WGPUShaderModule convVec4Modules[2]  = {nullptr, nullptr}; // [f32, f16]
     WGPUShaderModule convTiledModules[2] = {nullptr, nullptr}; // [f32, f16]
     std::map<std::array<uint32_t, 5>, WGPUComputePipeline> convVariantPipelines;
-    WGPUComputePipeline getConvVariantPipeline(bool tiled, uint32_t ic4, uint32_t kh, uint32_t kw, bool f16);
+    WGPUComputePipeline getConvVariantPipeline(uint32_t variant, uint32_t ic4, uint32_t kh, uint32_t kw, bool f16);
 
     WGPUShaderModule addShaderModule = nullptr;
     WGPUBindGroupLayout addBindGroupLayout = nullptr;
@@ -187,17 +191,6 @@ OIDN_NAMESPACE_BEGIN
     size_t uniformArenaOffset = 0;
     std::unordered_map<std::string, CachedPipeline> pipelineCache;
     std::unordered_map<const float*, WGPUBuffer> autoexposureBuffers;
-
-    struct PendingReadback
-    {
-      WGPUBuffer src;
-      WGPUBuffer readback;
-      void* host;
-      size_t size;
-    };
-    std::vector<PendingReadback> readbacks;
-
-    std::unordered_map<WGPUBuffer, void*> outputHosts;
   };
 
 OIDN_NAMESPACE_END
