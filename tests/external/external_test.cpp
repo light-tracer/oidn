@@ -79,6 +79,16 @@ int main(int argc, char** argv) try
   };
   WGPURequestAdapterOptions adapterOptions{};
   adapterOptions.powerPreference = WGPUPowerPreference_HighPerformance;
+#ifdef OIDN_WEBGPU_DAWN_MODERN
+  const char* f16Toggle = "vulkan_enable_f16_on_nvidia";
+  WGPUDawnTogglesDescriptor toggles{};
+  toggles.chain.sType = WGPUSType_DawnTogglesDescriptor;
+  if (std::getenv("OIDN_TEST_NVIDIA_F16")) {
+    std::puts("TEST ONLY: upstream NVIDIA f16 driver override enabled");
+    toggles.enabledToggleCount = 1; toggles.enabledToggles = &f16Toggle;
+    adapterOptions.nextInChain = &toggles.chain;
+  }
+#endif
   wgpuInstanceRequestAdapter2(instance, &adapterOptions, adapterCB);
   wait(instance, done);
   require(adapter, "no Dawn adapter");

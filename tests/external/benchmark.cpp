@@ -70,13 +70,22 @@ int main(int argc, char** argv) try
   };
   WGPURequestAdapterOptions adapterOptions{};
   adapterOptions.powerPreference = WGPUPowerPreference_HighPerformance;
-  const char* dxc = "use_dxc";
+  const char* enabledToggles[2]{};
+  size_t enabledToggleCount = 0;
   WGPUDawnTogglesDescriptor toggles{};
   toggles.chain.sType = WGPUSType_DawnTogglesDescriptor;
   if (std::getenv("OIDN_TEST_DXC")) {
-    toggles.enabledToggleCount = 1; toggles.enabledToggles = &dxc;
-    adapterOptions.nextInChain = &toggles.chain;
+    enabledToggles[enabledToggleCount++] = "use_dxc";
   }
+#ifdef OIDN_WEBGPU_DAWN_MODERN
+  if (std::getenv("OIDN_TEST_NVIDIA_F16")) {
+    std::puts("TEST ONLY: upstream NVIDIA f16 driver override enabled");
+    enabledToggles[enabledToggleCount++] = "vulkan_enable_f16_on_nvidia";
+  }
+#endif
+  toggles.enabledToggleCount = enabledToggleCount;
+  toggles.enabledToggles = enabledToggles;
+  adapterOptions.nextInChain = &toggles.chain;
   if (std::getenv("OIDN_TEST_VULKAN")) adapterOptions.backendType = WGPUBackendType_Vulkan;
   if (std::getenv("OIDN_TEST_D3D12")) adapterOptions.backendType = WGPUBackendType_D3D12;
   wgpuInstanceRequestAdapter2(instance, &adapterOptions, adapterCB);

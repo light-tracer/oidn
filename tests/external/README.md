@@ -76,3 +76,17 @@ library/wasm builds. Timestamp-query support is required. For provider diagnosis
 `OIDN_TEST_VULKAN`, `OIDN_TEST_D3D12`, and `OIDN_TEST_DXC` choose explicit adapter
 options; they do not override unsupported features. The pinned LT Dawn has an
 explicit NVIDIA Vulkan FP16 blacklist, documented in `devices/webgpu/PERFORMANCE.md`.
+
+## Current upstream Dawn (Windows native)
+
+Set `DAWN_ROOT` to the separate Dawn checkout built in `build-lt` (Release).
+This selects modern generated headers and the same DLL used by LT. The legacy
+provider and Emscripten paths remain available. Configure `OIDN_TEST_F16=ON` to
+register both precisions in CTest (12 cases).
+
+On upstream `08719d35a97`, NVIDIA Vulkan shader-f16 requires driver >=615.71.
+The RTX 3060 test host runs 610.88. The optional **test-only** environment variable
+`OIDN_TEST_NVIDIA_F16=1` enables upstream's `vulkan_enable_f16_on_nvidia` adapter
+toggle for diagnostic parity/profiling. It is not a library option, does not
+change Dawn's production guard, and must not be interpreted as supported-driver
+validation. With no override this host intentionally uses FP32.
