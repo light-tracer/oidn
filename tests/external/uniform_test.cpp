@@ -1,3 +1,4 @@
+#include "dawn_compat.h"
 // SPDX-License-Identifier: Apache-2.0
 #include <OpenImageDenoise/oidn_webgpu.h>
 #include "devices/webgpu/webgpu_device.h"
@@ -51,7 +52,7 @@ void testExternalUniforms(OIDNDevice oidn, WGPUDevice device, WGPUQueue queue, W
   struct Map { bool done = false, ok = false; } mapped;
   WGPUBufferMapCallbackInfo2 callback{};
   callback.mode = WGPUCallbackMode_AllowProcessEvents; callback.userdata1 = &mapped;
-  callback.callback = [](WGPUMapAsyncStatus status, const char*, void* data, void*)
+  callback.callback = [](WGPUMapAsyncStatus status, TestMessage, void* data, void*)
   { auto* result = static_cast<Map*>(data); result->ok = status == WGPUMapAsyncStatus_Success; result->done = true; };
   wgpuBufferMapAsync2(readback, WGPUMapMode_Read, 0, 8, callback);
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);

@@ -1,3 +1,4 @@
+#include "dawn_compat.h"
 // SPDX-License-Identifier: Apache-2.0
 // Uses the application's Dawn, not wgpu-native. Only this test reads back pixels.
 #include <OpenImageDenoise/oidn_webgpu.h>
@@ -61,10 +62,10 @@ int main(int argc, char** argv) try
   adapterCB.mode = WGPUCallbackMode_AllowProcessEvents;
   adapterCB.userdata1 = &adapter;
   adapterCB.userdata2 = &done;
-  adapterCB.callback = [](WGPURequestAdapterStatus status, WGPUAdapter adapter, const char* message, void* out, void* done)
+  adapterCB.callback = [](WGPURequestAdapterStatus status, WGPUAdapter adapter, TestMessage message, void* out, void* done)
   {
     if (status == WGPURequestAdapterStatus_Success) *static_cast<WGPUAdapter*>(out) = adapter;
-    else std::fprintf(stderr, "Adapter: %s\n", message);
+    else std::fprintf(stderr, "Adapter: %s\n", testText(message).c_str());
     *static_cast<bool*>(done) = true;
   };
   WGPURequestAdapterOptions adapterOptions{};
@@ -83,7 +84,7 @@ int main(int argc, char** argv) try
   require(adapter, "no Dawn adapter");
   WGPUAdapterInfo info{};
   wgpuAdapterGetInfo(adapter, &info);
-  std::printf("adapter %s %s backend=%d\n", info.device, info.description, int(info.backendType));
+  std::printf("adapter %s %s backend=%d\n", testText(info.device).c_str(), testText(info.description).c_str(), int(info.backendType));
   wgpuAdapterInfoFreeMembers(info);
 
   WGPUDevice device = nullptr;
@@ -99,24 +100,29 @@ int main(int argc, char** argv) try
     require(wgpuAdapterHasFeature(adapter, feature), "adapter has no shader-f16");
     deviceDesc.requiredFeatureCount = 2;
   }
+#ifdef OIDN_WEBGPU_DAWN_MODERN
+  WGPULimits limits{};
+  wgpuAdapterGetLimits(adapter, &limits);
+#else
   WGPUSupportedLimits supported{};
   wgpuAdapterGetLimits(adapter, &supported);
   WGPURequiredLimits limits{};
   limits.limits = supported.limits;
+#endif
   deviceDesc.requiredLimits = &limits;
-  deviceDesc.uncapturedErrorCallbackInfo2.callback = [](const WGPUDevice*, WGPUErrorType, const char* message, void*, void*)
+  deviceDesc.uncapturedErrorCallbackInfo2.callback = [](const WGPUDevice*, WGPUErrorType, TestMessage message, void*, void*)
   {
     ++validationErrors;
-    std::fprintf(stderr, "Dawn validation: %s\n", message);
+    std::fprintf(stderr, "Dawn validation: %s\n", testText(message).c_str());
   };
   WGPURequestDeviceCallbackInfo2 deviceCB{};
   deviceCB.mode = WGPUCallbackMode_AllowProcessEvents;
   deviceCB.userdata1 = &device;
   deviceCB.userdata2 = &done;
-  deviceCB.callback = [](WGPURequestDeviceStatus status, WGPUDevice device, const char* message, void* out, void* done)
+  deviceCB.callback = [](WGPURequestDeviceStatus status, WGPUDevice device, TestMessage message, void* out, void* done)
   {
     if (status == WGPURequestDeviceStatus_Success) *static_cast<WGPUDevice*>(out) = device;
-    else std::fprintf(stderr, "Device: %s\n", message);
+    else std::fprintf(stderr, "Device: %s\n", testText(message).c_str());
     *static_cast<bool*>(done) = true;
   };
   wgpuAdapterRequestDevice2(adapter, &deviceDesc, deviceCB);
@@ -191,7 +197,7 @@ int main(int argc, char** argv) try
     done = false; bool ok = false;
     WGPUBufferMapCallbackInfo2 cb{}; cb.mode = WGPUCallbackMode_AllowProcessEvents;
     cb.userdata1 = &done; cb.userdata2 = &ok;
-    cb.callback = [](WGPUMapAsyncStatus s,const char*,void* d,void* o) {
+    cb.callback = [](WGPUMapAsyncStatus s,TestMessage,void* d,void* o) {
       *static_cast<bool*>(d)=true; *static_cast<bool*>(o)=s==WGPUMapAsyncStatus_Success;
     };
     wgpuBufferMapAsync2(readback,WGPUMapMode_Read,0,count*8,cb); wait(instance,done); require(ok,"map failed");

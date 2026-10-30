@@ -26,8 +26,12 @@ OIDN_NAMESPACE_END
   { source.chain.sType = WGPUSType_ShaderSourceWGSL; source.code = oidnWGPUString(code); }
 #endif
 
-#if defined(OIDN_WEBGPU_EXTERNAL_ONLY)
+#if defined(OIDN_WEBGPU_EXTERNAL_ONLY) && !defined(OIDN_WEBGPU_DAWN_MODERN)
   inline const char* oidnWGPUEntryString(const char* s) { return s; }
 #else
   inline WGPUStringView oidnWGPUEntryString(const char* s) { return oidnWGPUString(s); }
+#endif
+
+#ifdef OIDN_WEBGPU_DAWN_MODERN
+using WGPUComputePassTimestampWrites = WGPUPassTimestampWrites;
 #endif

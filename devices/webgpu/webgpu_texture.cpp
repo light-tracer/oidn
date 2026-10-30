@@ -50,7 +50,7 @@ OIDN_NAMESPACE_BEGIN
     }
     const size_t bytes = ImageDesc(Format::Float4, desc.width, desc.height).getByteSize();
     auto* device = static_cast<WebGPUDevice*>(engine->getDevice());
-  #if defined(OIDN_WEBGPU_EXTERNAL_ONLY)
+  #if defined(OIDN_WEBGPU_EXTERNAL_ONLY) && !defined(OIDN_WEBGPU_DAWN_MODERN)
     WGPUSupportedLimits supported{};
     wgpuDeviceGetLimits(device->device, &supported);
     const auto& limits = supported.limits;
