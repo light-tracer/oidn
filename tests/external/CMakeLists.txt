@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 3.18)
 project(OIDNExternalWebGPU LANGUAGES C CXX)
 
 set(LT_ROOT "" CACHE PATH "Light Tracer checkout containing libs/dawn")
-if(NOT EXISTS "${LT_ROOT}/libs/dawn/include/webgpu/webgpu.h")
+set(DAWN_ROOT "" CACHE PATH "Modern Dawn source checkout (with build-lt)")
+if(NOT DAWN_ROOT AND NOT EXISTS "${LT_ROOT}/libs/dawn/include/webgpu/webgpu.h")
   message(FATAL_ERROR "Set LT_ROOT to the Light Tracer checkout")
 endif()
 
@@ -11,7 +12,6 @@ if(EMSCRIPTEN)
   add_library(lt_webgpu INTERFACE)
   target_link_options(lt_webgpu INTERFACE "-sUSE_WEBGPU=1")
 else()
-set(DAWN_ROOT "" CACHE PATH "Modern Dawn source checkout (with build-lt)")
 if(DAWN_ROOT)
   add_library(lt_webgpu SHARED IMPORTED GLOBAL)
   set_target_properties(lt_webgpu PROPERTIES
